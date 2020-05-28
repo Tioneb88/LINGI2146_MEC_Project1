@@ -18,6 +18,8 @@
 #include <stdio.h>
 #include <limits.h>
 #include <stdbool.h>
+#include <stdlib.h>
+#include <math.h>
 
 #define TRUE 1
 #define FALSE 0
@@ -302,9 +304,9 @@ static void recv_runicast(struct runicast_conn *c, const linkaddr_t *from, uint8
 
 	printf("runicast message recieved from %d.%d | originating from %d.%d | value %d \n",from->u8[0], from->u8[1],arrival->sendAddr.u8[0],arrival->sendAddr.u8[1],arrival->temp);
 
-	if(arrival->option == SENSOR_INFO){
+	if(arrival->option == SENSOR_INFO) {
 
-		if(add_to_compute_table(arrival, from)){
+		if(add_to_compute_table(arrival, from)) {
 			compute_struct *n;
 			for(n = list_head(computation_list); n != NULL; n = list_item_next(n)){
 				if(linkaddr_cmp(&n->address, &arrival->sendAddr)){
