@@ -225,7 +225,7 @@ static void runicast_recv(struct runicast_conn *c, const linkaddr_t *from, uint8
 			compute_struct *node;
 
 			for(node = list_head(computation_list); node != NULL; node = list_item_next(node)) {
-				if(linkaddr_cmp(&node->address, &arrival->sendAddr) && arrival->valve_status!=1 && abs(n->slope) > THRESHOLD) {
+				if(linkaddr_cmp(&node->address, &arrival->sendAddr) && arrival->valve_status!=1 && abs(node->slope) > THRESHOLD) {
 					runicast_struct message;
 					message.option = OPENING_VALVE;
 					linkaddr_copy(&(&message)->sendAddr, &linkaddr_node_addr);
@@ -394,7 +394,7 @@ static void broadcast_recv(struct broadcast_conn *c, const linkaddr_t *from)
 		printf("[Computation node] Routing info sent via broadcast, rank : %d\n", static_rank);
 		broadcast_send(&broadcast);
 	}
-	
+
 	else return;
 }
 static const struct broadcast_callbacks broadcast_call = {broadcast_recv};
