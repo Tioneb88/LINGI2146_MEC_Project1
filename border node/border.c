@@ -10,8 +10,8 @@
 //#include "dev/leds.h"
 #include "dev/serial-line.h"
 #include "net/rime/rime.h"
-#include "sys/ctimer.h"
 #include "sys/timer.h"
+#include "sys/ctimer.h"
 
 #include <stdio.h>
 #include <limits.h>
@@ -165,8 +165,8 @@ static void recv_runicast(struct runicast_conn *c, const linkaddr_t *from, uint8
 	else {
 		h = memb_alloc(&history_mem);
 		if(h == NULL) h = list_chop(history_table);
-		linkaddr_copy(&h->addr, from);
 		h->seq = seq;
+		linkaddr_copy(&h->addr, from);
 		list_push(history_table, h);
 	}
 	printf("[Border node] Runicast message received from : node %d.%d, value : %d, source : %d.%d\n", from->u8[0], from->u8[1], arrival->temp, arrival->sendAddr.u8[0], arrival->sendAddr.u8[1]);
