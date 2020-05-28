@@ -216,12 +216,12 @@ void compute_least_square_slope() {
 			int squares_sum = 0;
 			int j;
 			for(j=0; j<node->nbrValue; j++) {
-				product_sum += ((node->sensorValue)[i]-average) * (i-average_y);
-				squares_sum += pow(((node->sensorValue)[i]-average), 2);
+				product_sum += ((node->sensorValue)[i]-avg) * (i-avg_y);
+				squares_sum += pow(((node->sensorValue)[i]-avg), 2);
 			}
 			if(squares_sum==0) squares_sum++;
 
-			node->slope = (-product_sum / squares_sum(avg, node)) * 1000;
+			node->slope = (-product_sum / squares_sum) * 1000;
 		}
 	}
 }
