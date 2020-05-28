@@ -96,7 +96,7 @@ static short valve_is_open = 0;
 // Static structures definition
 static struct broadcast_conn broadcast;
 static struct runicast_conn runicast;
-static struct ctimer ctimer_valve_reset;
+//static struct ctimer ctimer_valve_reset; // not used yet
 
 
 /*---------------------------------------------------------------------------*/
@@ -106,10 +106,13 @@ AUTOSTART_PROCESSES(&sensor_process_runicast, &broadcast_routing);
 /*---------------------------------------------------------------------------*/
 
 
+// not used yet
+/*
 static void closing_valve_timeout(){
 	valve_is_open=0;
 	printf("[sensor node] - Closing valve after 10 minutes open\n");
 }
+*/
 
 
 /**
