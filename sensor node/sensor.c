@@ -156,7 +156,7 @@ static void broadcast_recv(struct broadcast_conn *c, const linkaddr_t *from)
 
 static const struct broadcast_callbacks broadcast_call = {broadcast_recv};
 
-static void recv_ruc(struct runicast_conn *c, const linkaddr_t *from, uint8_t seqno)
+static void recv_runicast(struct runicast_conn *c, const linkaddr_t *from, uint8_t seqno)
 {
 	static signed char rss_offset = -45;
 	runicast_struct* arrival = packetbuf_dataptr();
@@ -337,7 +337,7 @@ static void timedout_runicast(struct runicast_conn *c, const linkaddr_t *to, uin
 	}
 }
 
-static const struct runicast_callbacks runicast_callbacks = {recv_ruc, sent_runicast, timedout_runicast};
+static const struct runicast_callbacks runicast_callbacks = {recv_runicast, sent_runicast, timedout_runicast};
 
 short collect_measurement(){
 	leds_off(LEDS_ALL);
