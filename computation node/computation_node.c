@@ -125,7 +125,7 @@ AUTOSTART_PROCESSES(&computation_process_runicast, &computation_broadcast_routin
 /**
 * add_to_compute_table add the node to it's proccessing table if enough room or update it if already there
 **/
-int add_to_compute_table(runicast_struct* arrival, linkaddr_t *from){
+int add_to_compute_table(runicast_struct* arrival, const linkaddr_t *from){
 	compute_struct *n;
 
 	for(n = list_head(computation_list); n != NULL; n = list_item_next(n)){
