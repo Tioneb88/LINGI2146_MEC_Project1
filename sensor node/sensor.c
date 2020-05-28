@@ -41,16 +41,16 @@ struct Runicast {
 	short valve_status;                     // current state of the valve : closed(0) or open(1)
 	linkaddr_t sendAddr;                    // address of the node sending the message
 	linkaddr_t destAddr;                    // address of the node targeted to receive the message
-	linkaddr_t child_lost;                  // if child is lost
+	linkaddr_t child_lost;                  // if node is lost
 	uint8_t option;                         // type of message
 };
 
 typedef struct Children children_struct;
 struct Children {
-	linkaddr_t address;                     // address of the child
+	linkaddr_t address;                     // address of the node
 	linkaddr_t next_hop;                    // nexthop
 	clock_time_t last_update;               // last update of the children
-	children_struct *next;                  // next child
+	children_struct *next;                  // next node
 };
 
 typedef struct History history_struct;
@@ -160,20 +160,20 @@ static void runicast_recv(struct runicast_conn *c, const linkaddr_t *from, uint8
 		printf("[Sensor node] Sensor info received from : node %d.%d, source : %d.%d, sending to parent: %d.%d \n", from->u8[0], from->u8[1], arrival->sendAddr.u8[0], arrival->sendAddr.u8[1], parent_addr.u8[0], parent_addr.u8[1]);
 		runicast_send(&runicast, &parent_addr, MAX_RETRANSMISSIONS);
 
-		children_struct *child;
-		for(child = list_head(children_list); child != NULL; child = list_item_next(child)) {
-			if(linkaddr_cmp(&child->address, &arrival->sendAddr)) {
-				child->last_update = clock_time();
+		children_struct *node;
+		for(node = list_head(children_list); node != NULL; node = list_item_next(node)) {
+			if(linkaddr_cmp(&node->address, &arrival->sendAddr)) {
+				node->last_update = clock_time();
 				break;
 			}
 		}
-		if(child == NULL){
-			child = memb_alloc(&children_memb);
-			if(child == NULL) return;
-			linkaddr_copy(&child->address, &arrival->sendAddr);
-			linkaddr_copy(&child->next_hop, from);
-			child->last_update = clock_time();
-			list_add(children_list, child);
+		if(node == NULL){
+			node = memb_alloc(&children_memb);
+			if(node == NULL) return;
+			linkaddr_copy(&node->address, &arrival->sendAddr);
+			linkaddr_copy(&node->next_hop, from);
+			node->last_update = clock_time();
+			list_add(children_list, node);
 		}
 	}
 
@@ -182,16 +182,16 @@ static void runicast_recv(struct runicast_conn *c, const linkaddr_t *from, uint8
 		parent_rssi = cc2420_last_rssi + rssi_offset;
 
 		if(!linkaddr_cmp(&arrival->destAddr, &linkaddr_node_addr)) {
-			children_struct *child;
+			children_struct *node;
 			bool found = false;
-			for(child = list_head(children_list); child != NULL; child = list_item_next(child)) {
-				if(linkaddr_cmp(&child->address, &arrival->destAddr)) {
+			for(node = list_head(children_list); node != NULL; node = list_item_next(node)) {
+				if(linkaddr_cmp(&node->address, &arrival->destAddr)) {
 					found = true;
 					break;
 				}
 			}
 			packetbuf_copyfrom(arrival, sizeof(runicast_struct));
-			if(found) runicast_send(&runicast, &child->next_hop, MAX_RETRANSMISSIONS);
+			if(found) runicast_send(&runicast, &node->next_hop, MAX_RETRANSMISSIONS);
 			else runicast_send(&runicast, &parent_addr, MAX_RETRANSMISSIONS);
 		}
 
@@ -202,24 +202,24 @@ static void runicast_recv(struct runicast_conn *c, const linkaddr_t *from, uint8
 	else if(arrival->option == SAVE_CHILDREN) {
 		parent_rssi = -SHRT_MAX;
 		static_rank = SHRT_MAX;
-		children_struct *child;
+		children_struct *node;
 
-		for(child = list_head(children_list); child != NULL; child = list_item_next(child)) {
-			if(linkaddr_cmp(&child->address, &child->next_hop)) {
-				arrival->destAddr = child->address;
+		for(node = list_head(children_list); node != NULL; node = list_item_next(node)) {
+			if(linkaddr_cmp(&node->address, &node->next_hop)) {
+				arrival->destAddr = node->address;
 				packetbuf_copyfrom(arrival ,sizeof(runicast_struct));
-				runicast_send(&runicast, &child->next_hop, MAX_RETRANSMISSIONS);
+				runicast_send(&runicast, &node->next_hop, MAX_RETRANSMISSIONS);
 			}
-			list_remove(children_list, child);
+			list_remove(children_list, node);
 		}
 	}
 
 
 	else if(arrival->option == LOST_CHILDREN) {
-		children_struct *child;
-		for(child = list_head(children_list); child != NULL; child = list_item_next(child)) {
-			if(linkaddr_cmp(&child->address, &arrival->child_lost)) {
-				list_remove(children_list, child);
+		children_struct *node;
+		for(node = list_head(children_list); node != NULL; node = list_item_next(node)) {
+			if(linkaddr_cmp(&node->address, &arrival->child_lost)) {
+				list_remove(children_list, node);
 				break;
 			}
 		}
@@ -238,11 +238,11 @@ static void sent_runicast(struct runicast_conn *c, const linkaddr_t *to, uint8_t
 static void timedout_runicast(struct runicast_conn *c, const linkaddr_t *to, uint8_t retransmissions)
 {
 	if(!linkaddr_cmp(to, &parent_addr)) {
-		children_struct *child;
+		children_struct *node;
 		bool found = false;
-		for(child = list_head(children_list); child != NULL; child = list_item_next(child)) {
-			if(linkaddr_cmp(&child->address, to)) {
-				list_remove(children_list, child);
+		for(node = list_head(children_list); node != NULL; node = list_item_next(node)) {
+			if(linkaddr_cmp(&node->address, to)) {
+				list_remove(children_list, node);
 				found = true;
 				break;
 			}
@@ -253,12 +253,12 @@ static void timedout_runicast(struct runicast_conn *c, const linkaddr_t *to, uin
 			linkaddr_copy(&(&lost_msg)->sendAddr, &linkaddr_node_addr);
 			packetbuf_copyfrom(&lost_msg, sizeof(runicast_struct));
 			printf("[Sensor node] Runicast message timed out when sending to %d.%d, retransmission %d\n", to->u8[0], to->u8[1], retransmissions);
-			runicast_send(&runicast, &child->next_hop, MAX_RETRANSMISSIONS);
+			runicast_send(&runicast, &node->next_hop, MAX_RETRANSMISSIONS);
 		}
 	}
 
 	else {
-		children_struct *child;
+		children_struct *node;
 		runicast_struct save_message;
 		parent_rssi = -SHRT_MAX;
 		static_rank = SHRT_MAX;
@@ -266,13 +266,13 @@ static void timedout_runicast(struct runicast_conn *c, const linkaddr_t *to, uin
 		(&save_message)->option = SAVE_CHILDREN;
 		linkaddr_copy(&(&save_message)->sendAddr, &linkaddr_node_addr);
 
-		for(child = list_head(children_list); child != NULL; child = list_item_next(child)) {
-			if(linkaddr_cmp(&child->address, &child->next_hop)){
-				linkaddr_copy(&(&save_message)->destAddr, &child->address);
+		for(node = list_head(children_list); node != NULL; node = list_item_next(node)) {
+			if(linkaddr_cmp(&node->address, &node->next_hop)){
+				linkaddr_copy(&(&save_message)->destAddr, &node->address);
 				packetbuf_copyfrom(&save_message, sizeof(runicast_struct));
-				runicast_send(&runicast, &child->next_hop, MAX_RETRANSMISSIONS);
+				runicast_send(&runicast, &node->next_hop, MAX_RETRANSMISSIONS);
 			}
-			list_remove(children_list, child);
+			list_remove(children_list, node);
 		}
 	}
 }
