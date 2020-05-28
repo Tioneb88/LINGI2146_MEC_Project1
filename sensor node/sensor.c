@@ -362,7 +362,7 @@ static const struct runicast_callbacks runicast_call = {runicast_recv, sent_runi
 
 /*---------------------------------------------------------------------------*/
 PROCESS_THREAD(sensor_process_runicast, ev, data) {
-	PROCESS_EXITHANDLER(runicast_close(&runicast))
+	PROCESS_EXITHANDLER(runicast_close(&runicast);)
 
 	PROCESS_BEGIN();
 	printf("[Sensor node] Starting runicast")
