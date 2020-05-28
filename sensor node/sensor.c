@@ -68,7 +68,7 @@ struct History {
 // Enumerations definition
 enum{
 	SENSOR_INFO,
-	OPENING_VALVE,
+	OPENING_VALVE, // CLOSING_VALVE ??
 	SAVE_CHILDREN,
 	LOST_CHILDREN
 };
@@ -106,13 +106,24 @@ AUTOSTART_PROCESSES(&sensor_process_runicast, &broadcast_routing);
 /*---------------------------------------------------------------------------*/
 
 
-// not used yet
-/*
 static void closing_valve_timeout(){
 	valve_is_open=0;
 	printf("[Sensor node] --- Closing valve after 10 minutes open\n");
 }
-*/
+
+short collect_measurement(){
+	leds_off(LEDS_ALL);
+	printf("[Sensor node] Loading measurements\n");
+	short measurement;
+	if(valve_is_open) { measurement = (random_rand() % 50) +1; } // values in the interval 1-50
+	else { measurement = (random_rand() % 100) +1; } // values in the interval 1-100
+
+	if(measurement >= 40){
+		leds_toggle(LEDS_GREEN);
+	}
+	return measurement;
+}
+
 
 
 /*
@@ -160,7 +171,7 @@ static void broadcast_recv(struct broadcast_conn *c, const linkaddr_t *from)
 static const struct broadcast_callbacks broadcast_call = {broadcast_recv};
 
 
-static void runicast_recv(struct runicast_conn *c, const linkaddr_t *from, uint8_t seqno)
+static void runicast_recv(struct runicast_conn *c, const linkaddr_t *from, uint8_t seq)
 {
 	runicast_struct* arrival = packetbuf_dataptr();
 	history_struct *e = NULL;
@@ -172,11 +183,11 @@ static void runicast_recv(struct runicast_conn *c, const linkaddr_t *from, uint8
 	}
 
 	if(e != NULL) {
-		if(e->seq == seqno) {
-			printf("[Sensor node] Duplicate runicast message received from : node %d.%d, sequence number : %d\n", from->u8[0], from->u8[1], seqno);
+		if(e->seq == seq) {
+			printf("[Sensor node] Duplicate runicast message received from : node %d.%d, sequence number : %d\n", from->u8[0], from->u8[1], seq);
 			return;
 		}
-		e->seq = seqno;
+		e->seq = seq;
 	}
 	else {
 		e = memb_alloc(&history_mem);
@@ -184,7 +195,7 @@ static void runicast_recv(struct runicast_conn *c, const linkaddr_t *from, uint8
 			e = list_chop(history_table);
 		}
 		linkaddr_copy(&e->addr, from);
-		e->seq = seqno;
+		e->seq = seq;
 		list_push(history_table, e);
 	}
 	printf("[Sensor node] Runicast message received from : node %d.%d, value : %d, source : %d.%d\n",from->u8[0], from->u8[1], arrival->temp, arrival->sendAddr.u8[0], arrival->sendAddr.u8[1]);
@@ -213,7 +224,8 @@ static void runicast_recv(struct runicast_conn *c, const linkaddr_t *from, uint8
 		}
 	}
 
-	else if(arrival->option == OPENING_VALVE){
+
+	else if(arrival->option == OPENING_VALVE) {
 		parent_rssi = cc2420_last_rssi + rssi_offset;
 
 		if(!linkaddr_cmp(&arrival->destAddr, &linkaddr_node_addr)) {
@@ -225,7 +237,7 @@ static void runicast_recv(struct runicast_conn *c, const linkaddr_t *from, uint8
 					break;
 				}
 			}
-			packetbuf_copyfrom(arrival ,sizeof(runicast_struct));
+			packetbuf_copyfrom(arrival, sizeof(runicast_struct));
 			if(found) {
 				runicast_send(&runicast, &child->next_hop, MAX_RETRANSMISSIONS);
 			}
@@ -234,124 +246,116 @@ static void runicast_recv(struct runicast_conn *c, const linkaddr_t *from, uint8
 			}
 		}
 
-		else printf("Opening valve\n");
+		else printf("[Sensor node] +++ Opening valve\n");
 	}
 
-	/*else if(arrival->option == CLOSING_VALVE) {
-		parent_rssi = cc2420_last_rssi + rss_offset;
-		if(linkaddr_cmp(&arrival->destAddr, &linkaddr_node_addr)){
-			printf("Closing valve\n");
-			valve_is_open = 1;
-			ctimer_set(&ctimer_valve_reset, 600 * CLOCK_SECOND, closing_valve_timeout, NULL);
-		}
-		else{
-			children_struct *n;
+
+	else if(arrival->option == CLOSING_VALVE) {
+		parent_rssi = cc2420_last_rssi + rssi_offset;
+
+		if(!linkaddr_cmp(&arrival->destAddr, &linkaddr_node_addr)) {
+			children_struct *child;
 			bool found = false;
-			for(n = list_head(children_list); n != NULL; n = list_item_next(n)) {
-				if(linkaddr_cmp(&n->address, &arrival->destAddr)) {
+			for(child = list_head(children_list); child != NULL; child = list_item_next(child)) {
+				if(linkaddr_cmp(&child->address, &arrival->destAddr)) {
 					found = true;
 					break;
 				}
 			}
-
-			packetbuf_copyfrom(arrival ,sizeof(runicast_struct));
-			if(found==true){
-				runicast_send(&runicast, &n->next_hop, MAX_RETRANSMISSIONS);
+			packetbuf_copyfrom(arrival, sizeof(runicast_struct));
+			if(found){
+				runicast_send(&runicast, &child->next_hop, MAX_RETRANSMISSIONS);
 			}
-			else{ //don't know where to send it, -> send to parent
+			else {
 				runicast_send(&runicast, &parent_addr, MAX_RETRANSMISSIONS);
 			}
 		}
-	}*/
-	
-	else if(arrival->option == SAVE_CHILDREN){
-		printf("flushing info received\n");
-		printf("parent lost\n");
-		static_rank = SHRT_MAX;
+
+		else {
+			printf("[Sensor node] --- Closing valve\n");
+			valve_is_open = 1;
+			ctimer_set(&ctimer_valve_reset, 600 * CLOCK_SECOND, closing_valve_timeout, NULL);
+		}
+	}
+
+
+	else if(arrival->option == SAVE_CHILDREN) {
 		parent_rssi = -SHRT_MAX;
-		children_struct *n;
-		for(n = list_head(children_list); n != NULL; n = list_item_next(n)) {
-			if(linkaddr_cmp(&n->address, &n->next_hop)){
-				arrival->destAddr = n->address;
+		static_rank = SHRT_MAX;
+		children_struct *child;
+
+		for(child = list_head(children_list); child != NULL; child = list_item_next(child)) {
+			if(linkaddr_cmp(&child->address, &child->next_hop)) {
+				arrival->destAddr = child->address;
 				packetbuf_copyfrom(arrival ,sizeof(runicast_struct));
 				runicast_send(&runicast, &n->next_hop, MAX_RETRANSMISSIONS);
 			}
 			list_remove(children_list, n);
 		}
 	}
-	else if(arrival->option == LOST_CHILDREN){
-		children_struct *n;
-		for(n = list_head(children_list); n != NULL; n = list_item_next(n)) {
-			if(linkaddr_cmp(&n->address, &arrival->child_lost)){
-				list_remove(children_list, n);
+
+
+	else if(arrival->option == LOST_CHILDREN) {
+		children_struct *child;
+		for(child = list_head(children_list); child != NULL; child = list_item_next(child)) {
+			if(linkaddr_cmp(&child->address, &arrival->child_lost)) {
+				list_remove(children_list, child);
 				break;
 			}
-
 		}
 		packetbuf_copyfrom(arrival ,sizeof(runicast_struct));
 		runicast_send(&runicast, &parent_addr, MAX_RETRANSMISSIONS);
 	}
 }
 
-static void sent_runicast(struct runicast_conn *c, const linkaddr_t *to, uint8_t retransmissions){
-	printf("runicast message sent to %d.%d, retransmissions %d\n", to->u8[0], to->u8[1], retransmissions);
+static void sent_runicast(struct runicast_conn *c, const linkaddr_t *to, uint8_t retransmissions)
+{
+	printf("[Sensor node] Runicast message sent to %d.%d, retransmission %d\n", to->u8[0], to->u8[1], retransmissions);
 }
 
-static void timedout_runicast(struct runicast_conn *c, const linkaddr_t *to, uint8_t retransmissions){
-	printf("runicast message timed out when sending to %d.%d, retransmissions %d\n", to->u8[0], to->u8[1], retransmissions);
-	//if parent is not reachable, we forget it
-	if(linkaddr_cmp(to, &parent_addr)){
-		printf("parent lost\n");
-		static_rank = SHRT_MAX;
-		parent_rssi = -SHRT_MAX;
-		children_struct *n;
-		runicast_struct flush_message;
-		linkaddr_copy(&(&flush_message)->sendAddr, &linkaddr_node_addr);
-		(&flush_message)->option = SAVE_CHILDREN;
-		for(n = list_head(children_list); n != NULL; n = list_item_next(n)) {
-			if(linkaddr_cmp(&n->address, &n->next_hop)){
-				linkaddr_copy(&(&flush_message)->destAddr, &n->address);
-				packetbuf_copyfrom(&flush_message ,sizeof(runicast_struct));
-				runicast_send(&runicast, &n->next_hop, MAX_RETRANSMISSIONS);
-			}
-			list_remove(children_list, n);
-		}
-	}
-	//in case children is no more reachable
-	else{
-		children_struct *n;
+static void timedout_runicast(struct runicast_conn *c, const linkaddr_t *to, uint8_t retransmissions)
+{
+	if(!linkaddr_cmp(to, &parent_addr)) {
+		children_struct *child;
 		bool found = false;
-		for(n = list_head(children_list); n != NULL; n = list_item_next(n)) {
-			if(linkaddr_cmp(&n->address, to)){
-				list_remove(children_list, n);
+		for(child = list_head(children_list); child != NULL; child = list_item_next(child)) {
+			if(linkaddr_cmp(&child->address, to)) {
+				list_remove(children_list, child);
 				found = true;
 				break;
 			}
 		}
-
 		if (found==true) {
 			runicast_struct lost_msg;
-			linkaddr_copy(&(&lost_msg)->sendAddr, &linkaddr_node_addr);
 			(&lost_msg)->option = LOST_CHILDREN;
+			linkaddr_copy(&(&lost_msg)->sendAddr, &linkaddr_node_addr);
 			packetbuf_copyfrom(&lost_msg ,sizeof(runicast_struct));
+			printf("[Sensor node] Runicast message timed out when sending to %d.%d, retransmission %d\n", to->u8[0], to->u8[1], retransmissions);
 			runicast_send(&runicast, &n->next_hop, MAX_RETRANSMISSIONS);
 		}
 	}
-}
 
+	else {
+		children_struct *child;
+		runicast_struct save_message;
+		parent_rssi = -SHRT_MAX;
+		static_rank = SHRT_MAX;
+
+		(&save_message)->option = SAVE_CHILDREN;
+		linkaddr_copy(&(&save_message)->sendAddr, &linkaddr_node_addr);
+
+		for(child = list_head(children_list); child != NULL; child = list_item_next(child)) {
+			if(linkaddr_cmp(&child->address, &child->next_hop)){
+				linkaddr_copy(&(&save_message)->destAddr, &child->address);
+				packetbuf_copyfrom(&save_message ,sizeof(runicast_struct));
+				runicast_send(&runicast, &child->next_hop, MAX_RETRANSMISSIONS);
+			}
+			list_remove(children_list, child);
+		}
+	}
+}
 static const struct runicast_callbacks runicast_callbacks = {runicast_recv, sent_runicast, timedout_runicast};
 
-short collect_measurement(){
-	leds_off(LEDS_ALL);
-	short measurement;
-	if(valve_is_open) { measurement = (random_rand() % 50) +1; } // values in the interval 1-50
-	else { measurement = (random_rand() % 100) +1; } // values in the interval 1-100
-
-	if(measurement >= 40){
-		leds_toggle(LEDS_GREEN);
-	}
-	return measurement;
-}
 
 /*---------------------------------------------------------------------------*/
 PROCESS_THREAD(sensor_process_runicast, ev, data){
