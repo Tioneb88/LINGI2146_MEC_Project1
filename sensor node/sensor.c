@@ -28,28 +28,25 @@
 
 // Structures definition
 typedef struct Broadcast broadcast_struct;
-struct Broadcast
-{
+struct Broadcast {
 	short rank;                             // rank of the node
 	linkaddr_t sendAddr;                    // address of the node sending the message
 	uint8_t option;                         // type of message
 };
 
 typedef struct Runicast runicast_struct;
-struct Runicast
-{
+struct Runicast {
 	short rank;                             // rank of the node
 	short temp;                             // temperature value read by the sensor
 	short valve_status;                     // current state of the valve : closed(0) or open(1)
 	linkaddr_t sendAddr;                    // address of the node sending the message
 	linkaddr_t destAddr;                    // address of the node targeted to receive the message
-	linkaddr_t child_lost;                  //
+	linkaddr_t child_lost;                  // if child is lost
 	uint8_t option;                         // type of message
 };
 
 typedef struct Children children_struct;
-struct Children
-{
+struct Children {
 	linkaddr_t address;                     // address of the child
 	linkaddr_t next_hop;                    // nexthop
 	clock_time_t last_update;               // last update of the children
@@ -65,7 +62,7 @@ struct History {
 
 
 // Enumerations definition
-enum{
+enum {
 	SENSOR_INFO,
 	OPENING_VALVE,
 	SAVE_CHILDREN,
@@ -394,4 +391,4 @@ PROCESS_THREAD(sensor_broadcast_routing, ev, data) {
 	PROCESS_END();
 }
 
-	/*---------------------------------------------------------------------------*/
+/*---------------------------------------------------------------------------*/
