@@ -56,4 +56,4 @@ while True: #loop on every new message
 		currChar = s.recv(1).decode()
 	answer = process(msg) #decode the entire message and compute mean
 	if (answer != "none"):
-		s.sendall(str(answer)) #send answer to border-node
+		s.sendall(str(answer)) #send answer to boarder-node
