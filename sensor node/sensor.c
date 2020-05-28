@@ -106,10 +106,12 @@ AUTOSTART_PROCESSES(&sensor_process_runicast, &broadcast_routing);
 /*---------------------------------------------------------------------------*/
 
 
+/*
 static void closing_valve_timeout(){
 	valve_is_open=0;
 	printf("[Sensor node] --- Closing valve after 10 minutes open\n");
 }
+*/
 
 short collect_measurement(){
 	leds_off(LEDS_ALL);
@@ -292,7 +294,7 @@ static void runicast_recv(struct runicast_conn *c, const linkaddr_t *from, uint8
 				packetbuf_copyfrom(arrival ,sizeof(runicast_struct));
 				runicast_send(&runicast, &child->next_hop, MAX_RETRANSMISSIONS);
 			}
-			list_remove(children_list, n);
+			list_remove(children_list, child);
 		}
 	}
 
