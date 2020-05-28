@@ -130,6 +130,7 @@ static void broadcast_recv(struct broadcast_conn *c, const linkaddr_t *from)
 	static signed char rssi_signal;
 	static signed char rssi_offset;
 
+	// Behaviour by type of message
 	if(arrival->option == BROADCAST_INFO ) {
 		rssi_offset = -45;
 		rssi_signal = cc2420_last_rssi + rssi_offset;
@@ -150,7 +151,7 @@ static void broadcast_recv(struct broadcast_conn *c, const linkaddr_t *from)
 		message.sendAddr.u8[0] = linkaddr_node_addr.u8[0];
 		message.sendAddr.u8[1] = linkaddr_node_addr.u8[1];
 		packetbuf_copyfrom(&message ,sizeof(message));
-		printf("[Sensor node] Routing info sent via broadcast rank : %d\n", static_rank);
+		printf("[Sensor node] Routing info sent via broadcast, rank : %d\n", static_rank);
 		broadcast_send(&broadcast);
 	}
 
@@ -161,82 +162,82 @@ static const struct broadcast_callbacks broadcast_call = {broadcast_recv};
 
 static void runicast_recv(struct runicast_conn *c, const linkaddr_t *from, uint8_t seqno)
 {
-	static signed char rss_offset = -45;
 	runicast_struct* arrival = packetbuf_dataptr();
 	history_struct *e = NULL;
+	static signed char rssi_offset = -45;
+
+	// History managing
 	for (e = list_head(history_table); e != NULL; e = e->next) {
-		if(linkaddr_cmp(&e->addr, from)) { break; }
+		if(linkaddr_cmp(&e->addr, from)) break;
 	}
-	if(e == NULL) {
-		/* Create new history entry */
+
+	if(e != NULL) {
+		if(e->seq == seqno) {
+			printf("[Sensor node] Duplicate runicast message received from : node %d.%d, sequence number : %d\n", from->u8[0], from->u8[1], seqno);
+			return;
+		}
+		e->seq = seqno;
+	}
+	else {
 		e = memb_alloc(&history_mem);
 		if(e == NULL) {
-			e = list_chop(history_table); /* Remove oldest at full history */
+			e = list_chop(history_table);
 		}
 		linkaddr_copy(&e->addr, from);
 		e->seq = seqno;
 		list_push(history_table, e);
-	} else {
-		/* Detect duplicate callback */
-		if(e->seq == seqno) {
-			//printf("runicast message received from %d.%d, seqno %d (DUPLICATE)\n", from->u8[0], from->u8[1], seqno);
-			return;
-		}
-		/* Update existing history entry */
-		e->seq = seqno;
 	}
+	printf("[Sensor node] Runicast message received from : node %d.%d, value : %d, source : %d.%d\n",from->u8[0], from->u8[1], arrival->temp, arrival->sendAddr.u8[0], arrival->sendAddr.u8[1]);
 
-	printf("runicast message recieved from %d.%d | originating from %d.%d | value %d \n",from->u8[0], from->u8[1],arrival->sendAddr.u8[0],arrival->sendAddr.u8[1],arrival->temp);
-
-	if(arrival->option == SENSOR_INFO){
-		printf("sensor info received from %d.%d | originating from %d.%d, transmitting to parent: %d.%d \n", from->u8[0], from->u8[1],arrival->sendAddr.u8[0],arrival->sendAddr.u8[1], parent_addr.u8[0], parent_addr.u8[1]);
+	// Behaviour by type of message
+	if(arrival->option == SENSOR_INFO) {
 		linkaddr_copy(&arrival->destAddr, &parent_addr);
 		packetbuf_copyfrom(arrival ,sizeof(runicast_struct));
+		printf("[Sensor node] Sensor info received from : node %d.%d, source : %d.%d, Sending to parent: %d.%d \n", from->u8[0], from->u8[1], arrival->sendAddr.u8[0], arrival->sendAddr.u8[1], parent_addr.u8[0], parent_addr.u8[1]);
 		runicast_send(&runicast, &parent_addr, MAX_RETRANSMISSIONS);
 
-		children_struct *n;
-		for(n = list_head(children_list); n != NULL; n = list_item_next(n)) {
-			if(linkaddr_cmp(&n->address, &arrival->sendAddr)) {
-				n->last_update = clock_time();
+		children_struct *child;
+		for(child = list_head(children_list); child != NULL; child = list_item_next(child)) {
+			if(linkaddr_cmp(&child->address, &arrival->sendAddr)) {
+				child->last_update = clock_time();
 				break;
 			}
 		}
-		if(n == NULL){//children not found
-			n = memb_alloc(&children_memb);
-
-			if(n == NULL){
-				return;
-			}
-			linkaddr_copy(&n->address, &arrival->sendAddr);
-			linkaddr_copy(&n->next_hop, from);
-			n->last_update = clock_time();
-			list_add(children_list, n);
+		if(child == NULL){
+			child = memb_alloc(&children_memb);
+			if(child == NULL) return;
+			linkaddr_copy(&child->address, &arrival->sendAddr);
+			linkaddr_copy(&child->next_hop, from);
+			child->last_update = clock_time();
+			list_add(children_list, child);
 		}
 	}
+
 	else if(arrival->option == OPENING_VALVE){
-		parent_rssi = cc2420_last_rssi + rss_offset;
-		if(linkaddr_cmp(&arrival->destAddr, &linkaddr_node_addr)){
-			printf("Opening valve\n");
-		}
-		else{
-			children_struct *n;
+		parent_rssi = cc2420_last_rssi + rssi_offset;
+
+		if(!linkaddr_cmp(&arrival->destAddr, &linkaddr_node_addr)) {
+			children_struct *child;
 			bool found = false;
-			for(n = list_head(children_list); n != NULL; n = list_item_next(n)) {
-				if(linkaddr_cmp(&n->address, &arrival->destAddr)) {
+			for(child = list_head(children_list); child != NULL; child = list_item_next(child)) {
+				if(linkaddr_cmp(&child->address, &arrival->destAddr)) {
 					found = true;
 					break;
 				}
 			}
 			packetbuf_copyfrom(arrival ,sizeof(runicast_struct));
-			if(found==true){
-				runicast_send(&runicast, &n->next_hop, MAX_RETRANSMISSIONS);
+			if(found) {
+				runicast_send(&runicast, &child->next_hop, MAX_RETRANSMISSIONS);
 			}
-			else{ //don't know where to send it, -> send to parent
+			else {
 				runicast_send(&runicast, &parent_addr, MAX_RETRANSMISSIONS);
 			}
 		}
+
+		else printf("Opening valve\n");
 	}
-	/*else if(arrival->option == CLOSING_VALVE){
+
+	/*else if(arrival->option == CLOSING_VALVE) {
 		parent_rssi = cc2420_last_rssi + rss_offset;
 		if(linkaddr_cmp(&arrival->destAddr, &linkaddr_node_addr)){
 			printf("Closing valve\n");
@@ -262,6 +263,7 @@ static void runicast_recv(struct runicast_conn *c, const linkaddr_t *from, uint8
 			}
 		}
 	}*/
+	
 	else if(arrival->option == SAVE_CHILDREN){
 		printf("flushing info received\n");
 		printf("parent lost\n");
