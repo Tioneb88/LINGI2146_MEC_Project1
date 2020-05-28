@@ -365,7 +365,7 @@ PROCESS_THREAD(sensor_process_runicast, ev, data) {
 	PROCESS_EXITHANDLER(runicast_close(&runicast);)
 
 	PROCESS_BEGIN();
-	printf("[Sensor node] Starting runicast")
+	printf("[Sensor node] Starting runicast");
 	random_init(linkaddr_node_addr.u8[0]);
 	runicast_open(&runicast, 144, &runicast_call);
 
@@ -399,7 +399,7 @@ PROCESS_THREAD(sensor_broadcast_routing, ev, data) {
 	PROCESS_EXITHANDLER(broadcast_close(&broadcast);)
 
 	PROCESS_BEGIN();
-	printf("[Sensor node] Starting broadcast")
+	printf("[Sensor node] Starting broadcast");
 	broadcast_open(&broadcast, 129, &broadcast_call);
 
 	static_rank = SHRT_MAX;
