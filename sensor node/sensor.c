@@ -250,6 +250,7 @@ static void runicast_recv(struct runicast_conn *c, const linkaddr_t *from, uint8
 	}
 
 
+/*
 	else if(arrival->option == CLOSING_VALVE) {
 		parent_rssi = cc2420_last_rssi + rssi_offset;
 
@@ -277,6 +278,7 @@ static void runicast_recv(struct runicast_conn *c, const linkaddr_t *from, uint8
 			ctimer_set(&ctimer_valve_reset, 600 * CLOCK_SECOND, closing_valve_timeout, NULL);
 		}
 	}
+*/
 
 
 	else if(arrival->option == SAVE_CHILDREN) {
@@ -288,7 +290,7 @@ static void runicast_recv(struct runicast_conn *c, const linkaddr_t *from, uint8
 			if(linkaddr_cmp(&child->address, &child->next_hop)) {
 				arrival->destAddr = child->address;
 				packetbuf_copyfrom(arrival ,sizeof(runicast_struct));
-				runicast_send(&runicast, &n->next_hop, MAX_RETRANSMISSIONS);
+				runicast_send(&runicast, &child->next_hop, MAX_RETRANSMISSIONS);
 			}
 			list_remove(children_list, n);
 		}
@@ -331,7 +333,7 @@ static void timedout_runicast(struct runicast_conn *c, const linkaddr_t *to, uin
 			linkaddr_copy(&(&lost_msg)->sendAddr, &linkaddr_node_addr);
 			packetbuf_copyfrom(&lost_msg ,sizeof(runicast_struct));
 			printf("[Sensor node] Runicast message timed out when sending to %d.%d, retransmission %d\n", to->u8[0], to->u8[1], retransmissions);
-			runicast_send(&runicast, &n->next_hop, MAX_RETRANSMISSIONS);
+			runicast_send(&runicast, &child->next_hop, MAX_RETRANSMISSIONS);
 		}
 	}
 
