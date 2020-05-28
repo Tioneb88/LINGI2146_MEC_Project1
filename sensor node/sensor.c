@@ -54,14 +54,14 @@ struct Children
 	linkaddr_t address;                     // address of the child
 	linkaddr_t next_hop;                    // nexthop
 	clock_time_t last_update;               // last update of the children
-	struct children_struct *next;           // next child
+	children_struct *next;           // next child
 };
 
 typedef struct History history_struct;
 struct History {
 	uint8_t seq;                           // sequence number
 	linkaddr_t addr;                       // address of the node
-	struct history_struct *next;           // next entry in the history
+	history_struct *next;           // next entry in the history
 };
 
 
@@ -161,7 +161,7 @@ static void recv_runicast(struct runicast_conn *c, const linkaddr_t *from, uint8
 	static signed char rss_offset = -45;
 	runicast_struct* arrival = packetbuf_dataptr();
 	/* OPTIONAL: Sender history */
-	struct history_struct *e = NULL;
+	history_struct *e = NULL;
 	for(e = list_head(history_table); e != NULL; e = e->next) {
 		if(linkaddr_cmp(&e->addr, from)) {
 			break;
