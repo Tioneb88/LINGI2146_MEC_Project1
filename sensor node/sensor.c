@@ -100,12 +100,14 @@ PROCESS(sensor_broadcast_routing, "[Sensor node] +++ broadcast routing");
 AUTOSTART_PROCESSES(&sensor_process_runicast, &sensor_broadcast_routing);
 /*---------------------------------------------------------------------------*/
 
+
 /*
 	Generation of random measurements
 	Values in [1:50] if the valve is open
 	       in [1:100] else
 */
-short collect_measurement(){
+short collect_measurement()
+{
 	leds_off(LEDS_ALL);
 	printf("[Sensor node] Loading measurements\n");
 	short measurement;
@@ -117,6 +119,7 @@ short collect_measurement(){
 	}
 	return measurement;
 }
+
 
 /*
 	Functions for runicast
@@ -154,7 +157,7 @@ static void runicast_recv(struct runicast_conn *c, const linkaddr_t *from, uint8
 	if(arrival->option == SENSOR_INFO) {
 		linkaddr_copy(&arrival->destAddr, &parent_addr);
 		packetbuf_copyfrom(arrival ,sizeof(runicast_struct));
-		printf("[Sensor node] Sensor info received from : node %d.%d, source : %d.%d, Sending to parent: %d.%d \n", from->u8[0], from->u8[1], arrival->sendAddr.u8[0], arrival->sendAddr.u8[1], parent_addr.u8[0], parent_addr.u8[1]);
+		printf("[Sensor node] Sensor info received from : node %d.%d, source : %d.%d, sending to parent: %d.%d \n", from->u8[0], from->u8[1], arrival->sendAddr.u8[0], arrival->sendAddr.u8[1], parent_addr.u8[0], parent_addr.u8[1]);
 		runicast_send(&runicast, &parent_addr, MAX_RETRANSMISSIONS);
 
 		children_struct *child;
@@ -188,12 +191,8 @@ static void runicast_recv(struct runicast_conn *c, const linkaddr_t *from, uint8
 				}
 			}
 			packetbuf_copyfrom(arrival, sizeof(runicast_struct));
-			if(found) {
-				runicast_send(&runicast, &child->next_hop, MAX_RETRANSMISSIONS);
-			}
-			else {
-				runicast_send(&runicast, &parent_addr, MAX_RETRANSMISSIONS);
-			}
+			if(found) runicast_send(&runicast, &child->next_hop, MAX_RETRANSMISSIONS);
+			else runicast_send(&runicast, &parent_addr, MAX_RETRANSMISSIONS);
 		}
 
 		else printf("[Sensor node] +++ Opening valve\n");
@@ -248,11 +247,11 @@ static void timedout_runicast(struct runicast_conn *c, const linkaddr_t *to, uin
 				break;
 			}
 		}
-		if (found==true) {
+		if (found) {
 			runicast_struct lost_msg;
 			(&lost_msg)->option = LOST_CHILDREN;
 			linkaddr_copy(&(&lost_msg)->sendAddr, &linkaddr_node_addr);
-			packetbuf_copyfrom(&lost_msg ,sizeof(runicast_struct));
+			packetbuf_copyfrom(&lost_msg, sizeof(runicast_struct));
 			printf("[Sensor node] Runicast message timed out when sending to %d.%d, retransmission %d\n", to->u8[0], to->u8[1], retransmissions);
 			runicast_send(&runicast, &child->next_hop, MAX_RETRANSMISSIONS);
 		}
@@ -270,7 +269,7 @@ static void timedout_runicast(struct runicast_conn *c, const linkaddr_t *to, uin
 		for(child = list_head(children_list); child != NULL; child = list_item_next(child)) {
 			if(linkaddr_cmp(&child->address, &child->next_hop)){
 				linkaddr_copy(&(&save_message)->destAddr, &child->address);
-				packetbuf_copyfrom(&save_message ,sizeof(runicast_struct));
+				packetbuf_copyfrom(&save_message, sizeof(runicast_struct));
 				runicast_send(&runicast, &child->next_hop, MAX_RETRANSMISSIONS);
 			}
 			list_remove(children_list, child);
@@ -281,7 +280,7 @@ static const struct runicast_callbacks runicast_call = {runicast_recv, sent_runi
 
 
 /*
-	Functions for broadcast
+	Function for broadcast
 */
 static void broadcast_recv(struct broadcast_conn *c, const linkaddr_t *from)
 {
@@ -309,7 +308,7 @@ static void broadcast_recv(struct broadcast_conn *c, const linkaddr_t *from)
 		message.rank = static_rank;
 		message.sendAddr.u8[0] = linkaddr_node_addr.u8[0];
 		message.sendAddr.u8[1] = linkaddr_node_addr.u8[1];
-		packetbuf_copyfrom(&message ,sizeof(message));
+		packetbuf_copyfrom(&message, sizeof(message));
 		printf("[Sensor node] Routing info sent via broadcast, rank : %d\n", static_rank);
 		broadcast_send(&broadcast);
 	}
@@ -321,7 +320,8 @@ static const struct broadcast_callbacks broadcast_call = {broadcast_recv};
 
 /*---------------------------------------------------------------------------*/
 
-PROCESS_THREAD(sensor_process_runicast, ev, data) {
+PROCESS_THREAD(sensor_process_runicast, ev, data)
+{
 	PROCESS_EXITHANDLER(runicast_close(&runicast);)
 
 	PROCESS_BEGIN();
@@ -357,7 +357,8 @@ PROCESS_THREAD(sensor_process_runicast, ev, data) {
 
 /*---------------------------------------------------------------------------*/
 
-PROCESS_THREAD(sensor_broadcast_routing, ev, data) {
+PROCESS_THREAD(sensor_broadcast_routing, ev, data)
+{
 	PROCESS_EXITHANDLER(broadcast_close(&broadcast);)
 
 	PROCESS_BEGIN();

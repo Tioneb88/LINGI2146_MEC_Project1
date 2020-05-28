@@ -83,8 +83,8 @@ struct Compute {
 enum {
 	SENSOR_INFO,
 	OPENING_VALVE,
-	FLUSH_CHILDREN,
-	CHILDREN_LOST
+	SAVE_CHILDREN,
+	LOST_CHILDREN
 };
 
 enum {
@@ -122,11 +122,11 @@ AUTOSTART_PROCESSES(&computation_process_runicast, &computation_broadcast_routin
 /*---------------------------------------------------------------------------*/
 
 
-
 /*
 	Addition of sensor nodes to the computation table
 */
-int compute(runicast_struct* arrival, const linkaddr_t *from) {
+int compute(runicast_struct* arrival, const linkaddr_t *from)
+{
 	compute_struct *node;
 
 	for(node = list_head(computation_list); node != NULL; node = list_item_next(node)) {
@@ -154,52 +154,11 @@ int compute(runicast_struct* arrival, const linkaddr_t *from) {
 
 
 /*
-double mean_measurements(compute_struct *n){
-	sum=0;
-	int i;
-	for(i=0;i<n->nbrValue;i++){
-		sum += (n->sensorValue)[i];
-	}
-	return sum/n->nbrValue;
-}
-
-
-
-double mean_y(compute_struct *n){
-	int nombre_triangulaire = ((n->nbrValue)*(n->nbrValue+1))/2;
-	printf("mean y: %d\n", nombre_triangulaire/n->nbrValue);
-	return nombre_triangulaire/n->nbrValue;
-}
-
-
-double sum_product(double average, double average_y, compute_struct *n){
-	sum = 0;
-	int i;
-	for(i=0;i<n->nbrValue;i++){
-		sum += ((n->sensorValue)[i]-average) * (i-average_y);
-	}
-	//printf("sum_product: %d\n", sum);
-	return sum;
-}
-
-
-double sum_of_squares(double average, compute_struct *n){
-	sum = 0;
-	int i;
-	for(i=0;i<n->nbrValue;i++){
-		sum += pow(((n->sensorValue)[i]-average),2);
-	}
-	if(sum==0)return 1;
-	//printf("sum_of squares: %d\n", sum);
-	return sum;
-}
-*/
-
-/*
-	Computes the slope as the division of the sum of the product on the sum of the squares.
+	Computes the slope of the measurements as the division of the sum of the product on the sum of the squares.
 	For simplicity, the data is stored in reverse order (index 0 = last entry) => slope computed in reverse order
 */
-void compute_least_square_slope() {
+void compute_slope()
+{
 	compute_struct *node;
 	for(node = list_head(computation_list); node != NULL; node = list_item_next(node)) {
 		if(node->nbrValue >= 3) { // == 30
@@ -227,236 +186,218 @@ void compute_least_square_slope() {
 }
 
 
-/**
-* broadcast_recv is called when a routing information from a neighbouring node is recieved
-* it will decide if the node sending the broadcast would be a better suited parent that the current one
-* Parameters:
-* struct broadcast_conn *c : a pointer to the structure containing the rank and the adress of the sending node
-* const linkaddr_t *from : the adress of the sender
-**/
-static void broadcast_recv(struct broadcast_conn *c, const linkaddr_t *from)
+/*
+	Functions for runicast
+*/
+static void runicast_recv(struct runicast_conn *c, const linkaddr_t *from, uint8_t seq)
 {
-	static signed char rss_val;
-	static signed char rss_offset;
-	broadcast_struct* arrival = packetbuf_dataptr();
-	if(arrival->option == BROADCAST_INFO ) { // && linkaddr_node_addr.u8[0] != 1){	 //modified
-		rss_val = cc2420_last_rssi;
-		rss_offset=-45;
-		rss_val = rss_val + rss_offset;
-		//printf("Routing information recieved from: src %d.%d with rank %d rss value: %d\n", arrival->sendAddr.u8[0],arrival->sendAddr.u8[1] , arrival->rank, rss_val );
-		//TODO change the +1 by the quality of communication or smth
-		if(arrival->rank < static_rank -1 && rss_val > parent_rssi){ //cant add 1 on the left because it would overflow, so substract one on right side (since always > 0)
-			static_rank = arrival->rank +1;
-			parent_addr.u8[0] = (arrival->sendAddr).u8[0];
-			parent_addr.u8[1] = (arrival->sendAddr).u8[1];
-			parent_rssi = rss_val;
-			printf("\t parent changed, new ranking : new rank: %d, parent address %d.%d \n",static_rank, (parent_addr).u8[0],(arrival->sendAddr).u8[1]);
-		}
-	}
-	else if(arrival->option == BROADCAST_REQUEST && static_rank != SHRT_MAX){
-		//printf("Sending routing info via broadcast rank: %d\n", static_rank);
-		broadcast_struct message;
-		message.rank = static_rank;
-		message.sendAddr.u8[0] = linkaddr_node_addr.u8[0];
-		message.sendAddr.u8[1] = linkaddr_node_addr.u8[1];
-		packetbuf_copyfrom(&message ,sizeof(message));
-		broadcast_send(&broadcast);
-	}
-	else{
-		return;
-	}
-}
-static const struct broadcast_callbacks broadcast_call = {broadcast_recv};
-
-
-static void recv_runicast(struct runicast_conn *c, const linkaddr_t *from, uint8_t seqno)
-{
+	runicast_struct* arrival = packetbuf_dataptr();
 	history_struct *e = NULL;
+	static signed char rssi_val;
+	static signed char rssi_offset = -45;
+
+	// History managing
 	for(e = list_head(history_table); e != NULL; e = e->next) {
-		if(linkaddr_cmp(&e->addr, from)) {
-			break;
-		}
+		if(linkaddr_cmp(&e->addr, from)) break;
 	}
-	if(e == NULL) {
-		/* Create new history entry */
-		e = memb_alloc(&history_mem);
-		if(e == NULL) {
-			e = list_chop(history_table); /* Remove oldest at full history */
-		}
-		linkaddr_copy(&e->addr, from);
-		e->seq = seqno;
-		list_push(history_table, e);
-	} else {
-		/* Detect duplicate callback */
-		if(e->seq == seqno) {
-			//printf("runicast message received from %d.%d, seqno %d (DUPLICATE)\n", from->u8[0], from->u8[1], seqno);
+
+	if(e != NULL) {
+		if(e->seq == seq) {
+			printf("[Computation node] Duplicate runicast message received from : node %d.%d, sequence number : %d\n", from->u8[0], from->u8[1], seq);
 			return;
 		}
-		/* Update existing history entry */
-		e->seq = seqno;
+		e->seq = seq;
 	}
-	static signed char rss_val;
-	static signed char rss_offset;
-	runicast_struct* arrival = packetbuf_dataptr();
+	else {
+		e = memb_alloc(&history_mem);
+		if(e == NULL) {
+			e = list_chop(history_table);
+		}
+		linkaddr_copy(&e->addr, from);
+		e->seq = seq;
+		list_push(history_table, e);
+	}
+	printf("[Computation node] Runicast message received from : node %d.%d, value : %d, source : %d.%d\n", from->u8[0], from->u8[1], arrival->temp, arrival->sendAddr.u8[0], arrival->sendAddr.u8[1]);
 
-	printf("runicast message recieved from %d.%d | originating from %d.%d | value %d \n",from->u8[0], from->u8[1],arrival->sendAddr.u8[0],arrival->sendAddr.u8[1],arrival->temp);
-
+	// Behaviour by type of message
 	if(arrival->option == SENSOR_INFO) {
-
 		if(compute(arrival, from)) {
-			compute_struct *n;
-			for(n = list_head(computation_list); n != NULL; n = list_item_next(n)){
-				if(linkaddr_cmp(&n->address, &arrival->sendAddr)){
-					printf("%d.%d arrival = %d , value number: %d, slope: %d\n",arrival->sendAddr.u8[0], arrival->sendAddr.u8[1],arrival->temp, n->nbrValue, n->slope);
-					if(arrival->valve_status==1){
-						//valve is already open so do nothing
-						printf("the valve of %d.%d is open so do nothing\n", arrival->sendAddr.u8[0], arrival->sendAddr.u8[1]);
-					}else{
-						//valve is close so let's open it if threshold is reached
-						if(abs(n->slope) > THRESHOLD){
-							runicast_struct message;
-							linkaddr_copy(&(&message)->sendAddr, &linkaddr_node_addr);
-							linkaddr_copy(&(&message)->destAddr, &n->address);
-							message.option = OPENING_VALVE;
-							printf("sending messages to open the valve:\n");
-							packetbuf_copyfrom(&message, sizeof(runicast_struct));
-							runicast_send(&runicast, &n->next_hop, MAX_RETRANSMISSIONS);
-						}
-					}
-					printf("No need to open the valve, no message to send \n");
-					break;
+			compute_struct *node;
+
+			for(node = list_head(computation_list); node != NULL; node = list_item_next(node)) {
+				if(linkaddr_cmp(&node->address, &arrival->sendAddr) && arrival->valve_status!=1 && abs(n->slope) > THRESHOLD) {
+					runicast_struct message;
+					message.option = OPENING_VALVE;
+					linkaddr_copy(&(&message)->sendAddr, &linkaddr_node_addr);
+					linkaddr_copy(&(&message)->destAddr, &node->address);
+					packetbuf_copyfrom(&message, sizeof(runicast_struct));
+					printf("[Computation node] Message to open the valve sent to : %d.%d\n", from->u8[0], from->u8[1]);
+					runicast_send(&runicast, &node->next_hop, MAX_RETRANSMISSIONS);
 				}
 			}
-
 		}
-		else{
-			printf("forwarding to server via my parent %d.%d, too much to compute\n", parent_addr.u8[0], parent_addr.u8[1] );
+
+		else {
 			linkaddr_copy(&arrival->destAddr, &parent_addr);
-			packetbuf_copyfrom(arrival ,sizeof(runicast_struct));
+			packetbuf_copyfrom(arrival, sizeof(runicast_struct));
+			printf("[Computation node] Overloaded, sent to server by parent : %d.%d\n", parent_addr.u8[0], parent_addr.u8[1] );
 			runicast_send(&runicast, &parent_addr, MAX_RETRANSMISSIONS);
 		}
-		children_struct *n;
-		for(n = list_head(children_list); n != NULL; n = list_item_next(n)) {
-			if(linkaddr_cmp(&n->address, &arrival->sendAddr)) {
+
+		children_struct *node;
+		for(node = list_head(children_list); node != NULL; node = list_item_next(node)) {
+			if(linkaddr_cmp(&node->address, &arrival->sendAddr)) {
 				break;
 			}
 		}
-		if(n == NULL) {
+		if(node == NULL) {
 			n = memb_alloc(&children_memb);
-
-			if(n == NULL){
-				return;
-			}
-			linkaddr_copy(&n->address, &arrival->sendAddr);
-			linkaddr_copy(&n->next_hop, from);
-			list_add(children_list, n);
+			if(node == NULL) return;
+			linkaddr_copy(&node->address, &arrival->sendAddr);
+			linkaddr_copy(&node->next_hop, from);
+			list_add(children_list, node);
 		}
 	}
 
-	else if(arrival->option == OPENING_VALVE){
-		rss_val = cc2420_last_rssi;
-		rss_offset=-45;
-		rss_val = rss_val + rss_offset;
-		if(linkaddr_cmp(&arrival->destAddr, &linkaddr_node_addr)){
-			printf("Opening valve\n");
-		}
-		else{
-			children_struct *n;
+
+	else if(arrival->option == OPENING_VALVE) {
+		rssi_val = cc2420_last_rssi + rssi_offset;
+
+		if(!linkaddr_cmp(&arrival->destAddr, &linkaddr_node_addr)) {
+			children_struct *node;
 			bool found = false;
-			for(n = list_head(children_list); n != NULL; n = list_item_next(n)) {
-				if(linkaddr_cmp(&n->address, &arrival->destAddr)) {
+			for(node = list_head(children_list); node != NULL; node = list_item_next(node)) {
+				if(linkaddr_cmp(&node->address, &arrival->destAddr)) {
 					found = true;
 					break;
 				}
 			}
-
-			if(found==true){
-				packetbuf_copyfrom(arrival ,sizeof(runicast_struct));
-				printf("transmitting a message to %d.%d via nexthop %d.%d \n", arrival->destAddr.u8[0], arrival->destAddr.u8[1], n->next_hop.u8[0], n->next_hop.u8[1] );
-				runicast_send(&runicast, &n->next_hop, MAX_RETRANSMISSIONS);
-			}
-			else{ //don't know where to send it, -> send to parent
-				runicast_send(&runicast, &parent_addr, MAX_RETRANSMISSIONS);
-			}
+			packetbuf_copyfrom(arrival, sizeof(runicast_struct));
+			if(found) runicast_send(&runicast, &node->next_hop, MAX_RETRANSMISSIONS);
+			else runicast_send(&runicast, &parent_addr, MAX_RETRANSMISSIONS);
 		}
+
+		else printf("[Computation node] +++ Opening valve\n");
 	}
 
-	else if(arrival->option == FLUSH_CHILDREN){
-		printf("flushing info received\n");
-		printf("parent lost\n");
-		static_rank = SHRT_MAX;
+
+	else if(arrival->option == SAVE_CHILDREN) {
 		parent_rssi = -SHRT_MAX;
-		children_struct *n;
-		for(n = list_head(children_list); n != NULL; n = list_item_next(n)) {
-			if(linkaddr_cmp(&n->address, &n->next_hop)){
-				arrival->destAddr = n->address;
+		static_rank = SHRT_MAX;
+		children_struct *node;
+
+		for(node = list_head(children_list); node != NULL; node = list_item_next(node)) {
+			if(linkaddr_cmp(&node->address, &node->next_hop)){
+				arrival->destAddr = node->address;
 				packetbuf_copyfrom(arrival ,sizeof(runicast_struct));
-				runicast_send(&runicast, &n->next_hop, MAX_RETRANSMISSIONS);
+				runicast_send(&runicast, &node->next_hop, MAX_RETRANSMISSIONS);
 			}
-			list_remove(children_list, n);
+			list_remove(children_list, node);
 		}
 	}
 
-	else if(arrival->option == CHILDREN_LOST){
-		children_struct *n;
-		for(n = list_head(children_list); n != NULL; n = list_item_next(n)) {
-			if(linkaddr_cmp(&n->address, &arrival->child_lost)){
-				list_remove(children_list, n);
+
+	else if(arrival->option == LOST_CHILDREN) {
+		children_struct *node;
+		for(node = list_head(children_list); node != NULL; node = list_item_next(node)) {
+			if(linkaddr_cmp(&node->address, &arrival->child_lost)) {
+				list_remove(children_list, node);
 				break;
 			}
 		}
-		packetbuf_copyfrom(arrival ,sizeof(runicast_struct));
+		packetbuf_copyfrom(arrival, sizeof(runicast_struct));
 		runicast_send(&runicast, &parent_addr, MAX_RETRANSMISSIONS);
 	}
 }
 
 
-static void sent_runicast(struct runicast_conn *c, const linkaddr_t *to, uint8_t retransmissions){
-	printf("runicast message sent to %d.%d, retransmissions %d\n", to->u8[0], to->u8[1], retransmissions);
+static void sent_runicast(struct runicast_conn *c, const linkaddr_t *to, uint8_t retransmissions)
+{
+	printf("[Computation node] Runicast message sent to %d.%d, retransmission %d\n", to->u8[0], to->u8[1], retransmissions);
 }
 
 
-static void timedout_runicast(struct runicast_conn *c, const linkaddr_t *to, uint8_t retransmissions){
-	printf("runicast message timed out when sending to %d.%d, retransmissions %d\n", to->u8[0], to->u8[1], retransmissions);
-	//if parent is not reachable, we forget it
-	if(linkaddr_cmp(to, &parent_addr)){
-		printf("parent lost\n");
-		static_rank = SHRT_MAX;
-		parent_rssi = -SHRT_MAX;
-		children_struct *n;
-		runicast_struct flush_message;
-		linkaddr_copy(&(&flush_message)->sendAddr, &linkaddr_node_addr);
-		(&flush_message)->option = FLUSH_CHILDREN;
-		for(n = list_head(children_list); n != NULL; n = list_item_next(n)) {
-			if(linkaddr_cmp(&n->address, &n->next_hop)){
-				(&flush_message)->destAddr = n->address;
-				packetbuf_copyfrom(&flush_message ,sizeof(runicast_struct));
-				runicast_send(&runicast, &n->next_hop, MAX_RETRANSMISSIONS);
-			}
-			list_remove(children_list, n);
-		}
-	}
-
-	else{
-		children_struct *n;
+static void timedout_runicast(struct runicast_conn *c, const linkaddr_t *to, uint8_t retransmissions)
+{
+	if(!linkaddr_cmp(to, &parent_addr)) {
+		children_struct *node;
 		bool found = false;
-		for(n = list_head(children_list); n != NULL; n = list_item_next(n)) {
-			if(linkaddr_cmp(&n->address, to)){
-				list_remove(children_list, n);
+		for(node = list_head(children_list); node != NULL; node = list_item_next(node)) {
+			if(linkaddr_cmp(&node->address, to)) {
+				list_remove(children_list, node);
 				found = true;
 				break;
 			}
 		}
-		if (found==true) {
+		if (found) {
 			runicast_struct lost_msg;
+			(&lost_msg)->option = LOST_CHILDREN;
 			linkaddr_copy(&(&lost_msg)->sendAddr, &linkaddr_node_addr);
-			(&lost_msg)->option = CHILDREN_LOST;
-			packetbuf_copyfrom(&lost_msg ,sizeof(runicast_struct));
-			runicast_send(&runicast, &n->next_hop, MAX_RETRANSMISSIONS);
+			packetbuf_copyfrom(&lost_msg, sizeof(runicast_struct));
+			printf("[Computation node] Runicast message timed out when sending to %d.%d, retransmission %d\n", to->u8[0], to->u8[1], retransmissions);
+			runicast_send(&runicast, &node->next_hop, MAX_RETRANSMISSIONS);
+		}
+	}
+
+	else {
+		children_struct *node;
+		runicast_struct save_message;
+		parent_rssi = -SHRT_MAX;
+		static_rank = SHRT_MAX;
+
+		(&save_message)->option = SAVE_CHILDREN;
+		linkaddr_copy(&(&save_message)->sendAddr, &linkaddr_node_addr);
+
+		for(node = list_head(children_list); node != NULL; node = list_item_next(node)) {
+			if(linkaddr_cmp(&node->address, &node->next_hop)) {
+				linkaddr_copy(&(&save_message)->destAddr, &node->address);
+				packetbuf_copyfrom(&save_message, sizeof(runicast_struct));
+				runicast_send(&runicast, &node->next_hop, MAX_RETRANSMISSIONS);
+			}
+			list_remove(children_list, node);
 		}
 	}
 }
-static const struct runicast_callbacks runicast_call = {recv_runicast, sent_runicast, timedout_runicast};
+static const struct runicast_callbacks runicast_call = {runicast_recv, sent_runicast, timedout_runicast};
+
+
+/*
+	Function for broadcast
+*/
+static void broadcast_recv(struct broadcast_conn *c, const linkaddr_t *from)
+{
+	broadcast_struct* arrival = packetbuf_dataptr();
+	static signed char rssi_signal;
+	static signed char rssi_offset;
+
+	// Behaviour by type of message
+	if(arrival->option == BROADCAST_INFO ) {
+		rssi_offset = -45;
+		rssi_signal = cc2420_last_rssi + rssi_offset;
+		printf("[Computation node] Routing information received from : src %d.%d with rank %d and rssi signal : %d\n", arrival->sendAddr.u8[0], arrival->sendAddr.u8[1] , arrival->rank, rssi_signal );
+
+		if(rssi_signal > parent_rssi && arrival->rank < static_rank-1) {
+			static_rank = arrival->rank + 1;
+			parent_rssi = rssi_signal;
+			parent_addr.u8[0] = (arrival->sendAddr).u8[0];
+			parent_addr.u8[1] = (arrival->sendAddr).u8[1];
+			printf("[Computation node] New parent : %d.%d, new rank : %d\n", (parent_addr).u8[0], (arrival->sendAddr).u8[1], static_rank);
+		}
+	}
+
+	else if(arrival->option == BROADCAST_REQUEST && static_rank != SHRT_MAX) {
+		broadcast_struct message;
+		message.rank = static_rank;
+		message.sendAddr.u8[0] = linkaddr_node_addr.u8[0];
+		message.sendAddr.u8[1] = linkaddr_node_addr.u8[1];
+		packetbuf_copyfrom(&message, sizeof(message));
+		printf("[Computation node] Routing info sent via broadcast, rank : %d\n", static_rank);
+		broadcast_send(&broadcast);
+	}
+	
+	else return;
+}
+static const struct broadcast_callbacks broadcast_call = {broadcast_recv};
 
 
 /*---------------------------------------------------------------------------*/
@@ -473,7 +414,7 @@ PROCESS_THREAD(computation_process_runicast, ev, data){
 
 		PROCESS_WAIT_EVENT_UNTIL(etimer_expired(&et));
 
-		compute_least_square_slope();
+		compute_slope();
 	}
 	PROCESS_END();
 }
