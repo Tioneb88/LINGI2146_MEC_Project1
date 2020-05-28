@@ -146,13 +146,14 @@ int compute(runicast_struct* arrival, const linkaddr_t *from) {
 		(node->sensorValue)[0] = arrival->temp;
 		linkaddr_copy(&node->next_hop, from);
 		list_add(computation_list, node);
-		printf("[Computation node] New node added to the table : %d.%d\n", n->address.u8[0], n->address.u8[1]);
+		printf("[Computation node] New node added to the table : %d.%d\n", node->address.u8[0], node->address.u8[1]);
 		return 1;
 	}
 	else return 0;
 }
 
 
+/*
 double mean_measurements(compute_struct *n){
 	sum=0;
 	int i;
@@ -163,19 +164,14 @@ double mean_measurements(compute_struct *n){
 }
 
 
-/**
-* Compute the mean of the value used for y axis
-* since those values are 1,2,3... the mean can easily be calculated by computing the triangular number
-**/
+
 double mean_y(compute_struct *n){
 	int nombre_triangulaire = ((n->nbrValue)*(n->nbrValue+1))/2;
 	printf("mean y: %d\n", nombre_triangulaire/n->nbrValue);
 	return nombre_triangulaire/n->nbrValue;
 }
 
-/**
-* sum of (x - x_mean) * (y - y_mean)
-**/
+
 double sum_product(double average, double average_y, compute_struct *n){
 	sum = 0;
 	int i;
@@ -186,9 +182,7 @@ double sum_product(double average, double average_y, compute_struct *n){
 	return sum;
 }
 
-/**
-* sum of (x - x_mean)²
-**/
+
 double sum_of_squares(double average, compute_struct *n){
 	sum = 0;
 	int i;
@@ -199,24 +193,35 @@ double sum_of_squares(double average, compute_struct *n){
 	//printf("sum_of squares: %d\n", sum);
 	return sum;
 }
+*/
 
-/**
-* the slope = sum of product / sum of squares
-* the data are stored in reverse order in a table (last entry is at index 0),
-*   this causes me to compute the slope in the reverse sense
-*   I thus has to reverse the result of my computation by adding a minus
-**/
-void compute_least_square_slope(){
-	compute_struct *n;
-	for(n = list_head(computation_list); n != NULL; n = list_item_next(n)){
-		//if(n->nbrValue == 30){
-		if(n->nbrValue >= 3){
-			int avg = mean_measurements(n);
-			int avg_y = mean_y(n);
-			//- is required because I compute in reverse order to not mess with pointers
-			int slope = (-sum_product(avg, avg_y, n) / sum_of_squares(avg, n))*1000;
-			n->slope = slope;
-			printf("slope: %d \n",slope);
+/*
+	Computes the slope as the division of the sum of the product on the sum of the squares.
+	For simplicity, the data is stored in reverse order (index 0 = last entry) => slope computed in reverse order
+*/
+void compute_least_square_slope() {
+	compute_struct *node;
+	for(node = list_head(computation_list); node != NULL; node = list_item_next(node)) {
+		if(node->nbrValue >= 3) { // == 30
+			sum = 0;
+			int i;
+
+			int avg_y = (((node->nbrValue)*(node->nbrValue+1))/2) / node->nbrValue;
+			for(i=0; i<node->nbrValue; i++) {
+				sum += (node->sensorValue)[i];
+			}
+			int avg = sum/node->nbrValue;
+
+			int product_sum = 0;
+			int squares_sum = 0;
+			int j;
+			for(j=0; j<node->nbrValue; j++) {
+				product_sum += ((node->sensorValue)[i]-average) * (i-average_y);
+				squares_sum += pow(((node->sensorValue)[i]-average), 2);
+			}
+			if(squares_sum==0) squares_sum++;
+
+			node->slope = (-product_sum / squares_sum(avg, node)) * 1000;
 		}
 	}
 }
