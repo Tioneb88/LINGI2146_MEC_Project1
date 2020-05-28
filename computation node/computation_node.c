@@ -110,6 +110,7 @@ static int parent_rssi;
 static short static_rank;
 static linkaddr_t parent_addr;
 
+// Static structures definition
 static struct broadcast_conn broadcast;
 static struct runicast_conn runicast;
 
@@ -122,36 +123,33 @@ AUTOSTART_PROCESSES(&computation_process_runicast, &computation_broadcast_routin
 
 
 
-/**
-* add_to_compute_table add the node to it's proccessing table if enough room or update it if already there
-**/
-int add_to_compute_table(runicast_struct* arrival, const linkaddr_t *from){
-	compute_struct *n;
+/*
+	Addition of sensor nodes to the computation table
+*/
+int compute(runicast_struct* arrival, const linkaddr_t *from) {
+	compute_struct *node;
 
-	for(n = list_head(computation_list); n != NULL; n = list_item_next(n)){
-		//printf("node list %d.%d, arrival %d.%d\n", n->address.u8[0], n->address.u8[1], arrival->sendAddr.u8[0], arrival->sendAddr.u8[1]);
-		if(linkaddr_cmp(&arrival->sendAddr, &n->address)){
-			//printf("node already in table %d.%d\n", n->address.u8[0], n->address.u8[1]);
-			(n->sensorValue)[(n->nbrValue)%MAX_VALUES_BY_SENSOR] = arrival->temp;
-			(n->nbrValue)++;
-			return TRUE;
+	for(node = list_head(computation_list); node != NULL; node = list_item_next(node)) {
+		if(linkaddr_cmp(&arrival->sendAddr, &node->address)) {
+			(node->sensorValue)[(node->nbrValue) % MAX_VALUES_BY_SENSOR] = arrival->temp;
+			(node->nbrValue)++;
+			printf("[Computation node] Node already in table : %d.%d\n", node->address.u8[0], node->address.u8[1]);
+			return 1;
 		}
+	}
 
+	if(node == NULL && list_length(computation_list) < NBR_SENSOR_COMPUTED){
+		node = memb_alloc(&computation_children_memb);
+		linkaddr_copy(&node->address, &arrival->sendAddr);
+		node->slope = 0;
+		node->nbrValue = 1;
+		(node->sensorValue)[0] = arrival->temp;
+		linkaddr_copy(&node->next_hop, from);
+		list_add(computation_list, node);
+		printf("[Computation node] New node added to the table : %d.%d\n", n->address.u8[0], n->address.u8[1]);
+		return 1;
 	}
-	//printf("node not in list address %d.%d\n", arrival->sendAddr.u8[0],arrival->sendAddr.u8[1]);
-	if(n == NULL && list_length(computation_list)<NBR_SENSOR_COMPUTED){
-		n = memb_alloc(&computation_children_memb);
-		linkaddr_copy(&n->address, &arrival->sendAddr);
-		n->nbrValue = 1;
-		(n->sensorValue)[0] = arrival->temp;
-		n->slope = 0;
-		linkaddr_copy(&n->next_hop,from);
-		list_add(computation_list, n);
-		printf("add to the table %d.%d\n", n->address.u8[0],n->address.u8[1]);
-		return TRUE;
-	}else{
-		return FALSE;
-	}
+	else return 0;
 }
 
 
@@ -161,12 +159,7 @@ double mean_measurements(compute_struct *n){
 	for(i=0;i<n->nbrValue;i++){
 		sum += (n->sensorValue)[i];
 	}
-
-	//printf("sum %d\n",sum);
-	//printf("number of measurement %d\n",n->nbrValue);
-	//printf("mean: %d\n", sum/n->nbrValue);
 	return sum/n->nbrValue;
-
 }
 
 
@@ -174,7 +167,6 @@ double mean_measurements(compute_struct *n){
 * Compute the mean of the value used for y axis
 * since those values are 1,2,3... the mean can easily be calculated by computing the triangular number
 **/
-
 double mean_y(compute_struct *n){
 	int nombre_triangulaire = ((n->nbrValue)*(n->nbrValue+1))/2;
 	printf("mean y: %d\n", nombre_triangulaire/n->nbrValue);
@@ -306,7 +298,7 @@ static void recv_runicast(struct runicast_conn *c, const linkaddr_t *from, uint8
 
 	if(arrival->option == SENSOR_INFO) {
 
-		if(add_to_compute_table(arrival, from)) {
+		if(compute(arrival, from)) {
 			compute_struct *n;
 			for(n = list_head(computation_list); n != NULL; n = list_item_next(n)){
 				if(linkaddr_cmp(&n->address, &arrival->sendAddr)){
