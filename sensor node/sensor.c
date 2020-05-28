@@ -99,10 +99,6 @@ static struct runicast_conn runicast;
 //static struct ctimer ctimer_valve_reset; // not used yet
 
 
-// Static constant structure definition
-static const struct broadcast_callbacks broadcast_call = {broadcast_recv};
-
-
 /*---------------------------------------------------------------------------*/
 PROCESS(sensor_process_runicast, "[Sensor node] +++ runicast execution");
 PROCESS(broadcast_routing, "[Sensor node] +++ broadcast routing");
@@ -160,6 +156,8 @@ static void broadcast_recv(struct broadcast_conn *c, const linkaddr_t *from)
 
 	else return;
 }
+static const struct broadcast_callbacks broadcast_call = {broadcast_recv};
+
 
 static void runicast_recv(struct runicast_conn *c, const linkaddr_t *from, uint8_t seqno)
 {
