@@ -2,3 +2,5 @@
 *.a
 *.map
 *.z1
+*/symbols.c
+*/symbols.h
