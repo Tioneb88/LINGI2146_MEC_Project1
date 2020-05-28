@@ -19,14 +19,14 @@ def process(pack):
 		dst0 = int(dpack[1])
 		dst1 = int(dpack[2])
 		val = int(dpack[3])
-		print("Sensor data: "+ str(val) +" from node " + str(dst0) + "." + str(dst1)) 
+		print("Sensor data: "+ str(val) +" from node " + str(dst0) + "." + str(dst1))
 		sensors[dst0].append(val) #add the new value to the concerned sensor list of values
 		sensors[dst0] = sensors[dst0][-30:] #only take the last 30 values. Olders are discarded
 		print("Last values for this sensor :")
 		print(sensors[dst0])
 		action = compute(dst0) #compute the mean
 		answer = "ACTION " + str(dst0) + " " + str(dst1) + " " + str(action) + " \n" #create a message to send to the boarder-node, using same message construction
-		return answer 
+		return answer
 	else:
 		return "none"
 
@@ -34,7 +34,7 @@ def process(pack):
 def compute(dest): #mean computation and decide the action to do
 	values = sensors[dest]
 	length = len(sensors[dest])
-	mean = (sum(values)) / length 
+	mean = (sum(values)) / length
 	if (mean >= TRESHOLD):
 		return "CLOSE"
 	return "OPEN" #mean < TRESHOLD

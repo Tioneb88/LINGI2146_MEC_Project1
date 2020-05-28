@@ -21,16 +21,13 @@
 #include <stdlib.h>
 #include <math.h>
 
-#define TRUE 1
-#define FALSE 0
 #define MAX_HISTORY 10
 #define MAX_CHILDREN 100
 #define ROUTING_INTERVAL 120
 #define MAX_RETRANSMISSIONS 10
 #define COMPUTING_INTERVAL 60
 #define MAX_VALUES_BY_SENSOR 30
-
-#define NBR_SENSOR_COMPUTED 2
+#define MAX_SENSOR_COMPUTED 2
 #define THRESHOLD 10
 
 
@@ -101,7 +98,7 @@ LIST(children_list);
 MEMB(children_memb, children_struct, MAX_CHILDREN);
 
 LIST(computation_list);
-MEMB(computation_children_memb, compute_struct, NBR_SENSOR_COMPUTED);
+MEMB(computation_children_memb, compute_struct, MAX_SENSOR_COMPUTED);
 
 
 // Static variables definition
@@ -138,7 +135,7 @@ int compute(runicast_struct* arrival, const linkaddr_t *from)
 		}
 	}
 
-	if(node == NULL && list_length(computation_list) < NBR_SENSOR_COMPUTED){
+	if(node == NULL && list_length(computation_list) < MAX_SENSOR_COMPUTED){
 		node = memb_alloc(&computation_children_memb);
 		linkaddr_copy(&node->address, &arrival->sendAddr);
 		node->slope = 0;
@@ -193,7 +190,7 @@ static void runicast_recv(struct runicast_conn *c, const linkaddr_t *from, uint8
 {
 	runicast_struct* arrival = packetbuf_dataptr();
 	history_struct *e = NULL;
-	static signed char rssi_val;
+	static signed char rssi_signal;
 	static signed char rssi_offset = -45;
 
 	// History managing
@@ -261,7 +258,7 @@ static void runicast_recv(struct runicast_conn *c, const linkaddr_t *from, uint8
 
 
 	else if(arrival->option == OPENING_VALVE) {
-		rssi_val = cc2420_last_rssi + rssi_offset;
+		rssi_signal = cc2420_last_rssi + rssi_offset;
 
 		if(!linkaddr_cmp(&arrival->destAddr, &linkaddr_node_addr)) {
 			children_struct *node;
