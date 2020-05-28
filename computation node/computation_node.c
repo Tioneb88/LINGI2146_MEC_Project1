@@ -251,7 +251,7 @@ static void runicast_recv(struct runicast_conn *c, const linkaddr_t *from, uint8
 			}
 		}
 		if(node == NULL) {
-			n = memb_alloc(&children_memb);
+			node = memb_alloc(&children_memb);
 			if(node == NULL) return;
 			linkaddr_copy(&node->address, &arrival->sendAddr);
 			linkaddr_copy(&node->next_hop, from);
