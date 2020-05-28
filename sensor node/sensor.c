@@ -54,21 +54,21 @@ struct Children
 	linkaddr_t address;                     // address of the child
 	linkaddr_t next_hop;                    // nexthop
 	clock_time_t last_update;               // last update of the children
-	children_struct *next;           // next child
+	children_struct *next;                  // next child
 };
 
 typedef struct History history_struct;
 struct History {
 	uint8_t seq;                           // sequence number
 	linkaddr_t addr;                       // address of the node
-	history_struct *next;           // next entry in the history
+	history_struct *next;                  // next entry in the history
 };
 
 
 // Enumerations definition
 enum{
 	SENSOR_INFO,
-	OPENING_VALVE, // CLOSING_VALVE ??
+	OPENING_VALVE,
 	SAVE_CHILDREN,
 	LOST_CHILDREN
 };
@@ -96,7 +96,6 @@ static short valve_is_open = 0;
 // Static structures definition
 static struct broadcast_conn broadcast;
 static struct runicast_conn runicast;
-//static struct ctimer ctimer_valve_reset; // not used yet
 
 
 /*---------------------------------------------------------------------------*/
@@ -105,20 +104,17 @@ PROCESS(sensor_broadcast_routing, "[Sensor node] +++ broadcast routing");
 AUTOSTART_PROCESSES(&sensor_process_runicast, &sensor_broadcast_routing);
 /*---------------------------------------------------------------------------*/
 
-
 /*
-static void closing_valve_timeout(){
-	valve_is_open=0;
-	printf("[Sensor node] --- Closing valve after 10 minutes open\n");
-}
+	Generation of random measurements
+	Values in [1:50] if the valve is open
+	       in [1:100] else
 */
-
 short collect_measurement(){
 	leds_off(LEDS_ALL);
 	printf("[Sensor node] Loading measurements\n");
 	short measurement;
-	if(valve_is_open) { measurement = (random_rand() % 50) +1; } // values in the interval 1-50
-	else { measurement = (random_rand() % 100) +1; } // values in the interval 1-100
+	if(valve_is_open) { measurement = (random_rand() % 50) +1; }
+	else { measurement = (random_rand() % 100) +1; }
 
 	if(measurement >= 40){
 		leds_toggle(LEDS_GREEN);
@@ -126,52 +122,9 @@ short collect_measurement(){
 	return measurement;
 }
 
-
-
 /*
-* broadcast_recv is called when a routing information from a neighbouring node is recieved
-* it will decide if the node sending the broadcast would be a better suited parent that the current one
-* Parameters:
-* struct broadcast_conn *c : a pointer to the structure containing the rank and the adress of the sending node
-* const linkaddr_t *from : the adress of the sender
-* INSPIRED FROM example-broadcast.c
+	Functions for runicast
 */
-static void broadcast_recv(struct broadcast_conn *c, const linkaddr_t *from)
-{
-	broadcast_struct* arrival = packetbuf_dataptr();
-	static signed char rssi_signal;
-	static signed char rssi_offset;
-
-	// Behaviour by type of message
-	if(arrival->option == BROADCAST_INFO ) {
-		rssi_offset = -45;
-		rssi_signal = cc2420_last_rssi + rssi_offset;
-		printf("[Sensor node] Routing information received from : src %d.%d with rank %d and rssi signal : %d\n", arrival->sendAddr.u8[0], arrival->sendAddr.u8[1] , arrival->rank, rssi_signal );
-
-		if(rssi_signal > parent_rssi && arrival->rank < static_rank-1){
-			static_rank = arrival->rank + 1;
-			parent_rssi = rssi_signal;
-			parent_addr.u8[0] = (arrival->sendAddr).u8[0];
-			parent_addr.u8[1] = (arrival->sendAddr).u8[1];
-			printf("[Sensor node] New parent : %d.%d, new rank : %d\n", (parent_addr).u8[0], (arrival->sendAddr).u8[1], static_rank);
-		}
-	}
-
-	else if(arrival->option == BROADCAST_REQUEST && static_rank != SHRT_MAX) {
-		broadcast_struct message;
-		message.rank = static_rank;
-		message.sendAddr.u8[0] = linkaddr_node_addr.u8[0];
-		message.sendAddr.u8[1] = linkaddr_node_addr.u8[1];
-		packetbuf_copyfrom(&message ,sizeof(message));
-		printf("[Sensor node] Routing info sent via broadcast, rank : %d\n", static_rank);
-		broadcast_send(&broadcast);
-	}
-
-	else return;
-}
-static const struct broadcast_callbacks broadcast_call = {broadcast_recv};
-
-
 static void runicast_recv(struct runicast_conn *c, const linkaddr_t *from, uint8_t seq)
 {
 	runicast_struct* arrival = packetbuf_dataptr();
@@ -251,37 +204,6 @@ static void runicast_recv(struct runicast_conn *c, const linkaddr_t *from, uint8
 	}
 
 
-/*
-	else if(arrival->option == CLOSING_VALVE) {
-		parent_rssi = cc2420_last_rssi + rssi_offset;
-
-		if(!linkaddr_cmp(&arrival->destAddr, &linkaddr_node_addr)) {
-			children_struct *child;
-			bool found = false;
-			for(child = list_head(children_list); child != NULL; child = list_item_next(child)) {
-				if(linkaddr_cmp(&child->address, &arrival->destAddr)) {
-					found = true;
-					break;
-				}
-			}
-			packetbuf_copyfrom(arrival, sizeof(runicast_struct));
-			if(found){
-				runicast_send(&runicast, &child->next_hop, MAX_RETRANSMISSIONS);
-			}
-			else {
-				runicast_send(&runicast, &parent_addr, MAX_RETRANSMISSIONS);
-			}
-		}
-
-		else {
-			printf("[Sensor node] --- Closing valve\n");
-			valve_is_open = 1;
-			ctimer_set(&ctimer_valve_reset, 600 * CLOCK_SECOND, closing_valve_timeout, NULL);
-		}
-	}
-*/
-
-
 	else if(arrival->option == SAVE_CHILDREN) {
 		parent_rssi = -SHRT_MAX;
 		static_rank = SHRT_MAX;
@@ -311,10 +233,12 @@ static void runicast_recv(struct runicast_conn *c, const linkaddr_t *from, uint8
 	}
 }
 
+
 static void sent_runicast(struct runicast_conn *c, const linkaddr_t *to, uint8_t retransmissions)
 {
 	printf("[Sensor node] Runicast message sent to %d.%d, retransmission %d\n", to->u8[0], to->u8[1], retransmissions);
 }
+
 
 static void timedout_runicast(struct runicast_conn *c, const linkaddr_t *to, uint8_t retransmissions)
 {
@@ -360,7 +284,47 @@ static void timedout_runicast(struct runicast_conn *c, const linkaddr_t *to, uin
 static const struct runicast_callbacks runicast_call = {runicast_recv, sent_runicast, timedout_runicast};
 
 
+/*
+	Functions for broadcast
+*/
+static void broadcast_recv(struct broadcast_conn *c, const linkaddr_t *from)
+{
+	broadcast_struct* arrival = packetbuf_dataptr();
+	static signed char rssi_signal;
+	static signed char rssi_offset;
+
+	// Behaviour by type of message
+	if(arrival->option == BROADCAST_INFO ) {
+		rssi_offset = -45;
+		rssi_signal = cc2420_last_rssi + rssi_offset;
+		printf("[Sensor node] Routing information received from : src %d.%d with rank %d and rssi signal : %d\n", arrival->sendAddr.u8[0], arrival->sendAddr.u8[1] , arrival->rank, rssi_signal );
+
+		if(rssi_signal > parent_rssi && arrival->rank < static_rank-1){
+			static_rank = arrival->rank + 1;
+			parent_rssi = rssi_signal;
+			parent_addr.u8[0] = (arrival->sendAddr).u8[0];
+			parent_addr.u8[1] = (arrival->sendAddr).u8[1];
+			printf("[Sensor node] New parent : %d.%d, new rank : %d\n", (parent_addr).u8[0], (arrival->sendAddr).u8[1], static_rank);
+		}
+	}
+
+	else if(arrival->option == BROADCAST_REQUEST && static_rank != SHRT_MAX) {
+		broadcast_struct message;
+		message.rank = static_rank;
+		message.sendAddr.u8[0] = linkaddr_node_addr.u8[0];
+		message.sendAddr.u8[1] = linkaddr_node_addr.u8[1];
+		packetbuf_copyfrom(&message ,sizeof(message));
+		printf("[Sensor node] Routing info sent via broadcast, rank : %d\n", static_rank);
+		broadcast_send(&broadcast);
+	}
+
+	else return;
+}
+static const struct broadcast_callbacks broadcast_call = {broadcast_recv};
+
+
 /*---------------------------------------------------------------------------*/
+
 PROCESS_THREAD(sensor_process_runicast, ev, data) {
 	PROCESS_EXITHANDLER(runicast_close(&runicast);)
 
@@ -391,10 +355,12 @@ PROCESS_THREAD(sensor_process_runicast, ev, data) {
 	}
 	PROCESS_END();
 }
+
 /*---------------------------------------------------------------------------*/
 
 
 /*---------------------------------------------------------------------------*/
+
 PROCESS_THREAD(sensor_broadcast_routing, ev, data) {
 	PROCESS_EXITHANDLER(broadcast_close(&broadcast);)
 
@@ -427,6 +393,6 @@ PROCESS_THREAD(sensor_broadcast_routing, ev, data) {
 		}
 	}
 	PROCESS_END();
-	/*---------------------------------------------------------------------------*/
-
 }
+
+	/*---------------------------------------------------------------------------*/
