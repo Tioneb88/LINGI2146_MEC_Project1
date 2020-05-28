@@ -1,3 +1,8 @@
+/*
+	LINGI2146 Mobile and Embedded Computing : Project1
+	Author : Benoît Michel
+	Date : May 2020
+*/
 #include "contiki.h"
 #include "net/rime/rime.h"
 #include "random.h"
@@ -18,7 +23,7 @@
 //DEFINE
 #define seconds_before_routing_info 120 //TODO change to something like 120 after testing
 #define seconds_before_sending_measurement 60 //TODO change to something like 60 after testing
-#define seconds_before_calculating_measurement 60 
+#define seconds_before_calculating_measurement 60
 #define MAX_VALUES_PER_SENSOR 30
 #define MAX_RETRANSMISSIONS 10
 #define NUM_HISTORY_ENTRIES 10
@@ -122,7 +127,7 @@ AUTOSTART_PROCESSES(&runicast_process, &broadcast_routing);
 
 
 /**
-* add_to_compute_table add the node to it's proccessing table if enough room or update it if already there 
+* add_to_compute_table add the node to it's proccessing table if enough room or update it if already there
 **/
 int add_to_compute_table(runicast_struct* arrival, linkaddr_t *from){
 	struct compute_children *n;
@@ -135,7 +140,7 @@ int add_to_compute_table(runicast_struct* arrival, linkaddr_t *from){
 			(n->nbrValue)++;
 			return TRUE;
 		}
-		
+
 	}
 	//printf("node not in list address %d.%d\n", arrival->senderAdr.u8[0],arrival->senderAdr.u8[1]);
 	if(n == NULL && list_length(computation_list)<NBR_SENSOR_COMPUTED){
@@ -144,7 +149,7 @@ int add_to_compute_table(runicast_struct* arrival, linkaddr_t *from){
 		n->nbrValue = 1;
 		(n->sensorValue)[0] = arrival->status;
 		n->slope = 0;
-		linkaddr_copy(&n->next_hop,from); 
+		linkaddr_copy(&n->next_hop,from);
 		list_add(computation_list, n);
 		printf("add to the table %d.%d\n", n->address.u8[0],n->address.u8[1]);
 		return TRUE;
@@ -232,10 +237,10 @@ void compute_least_square_slope(){
 /**
 * //TODO remove the broadcast struct and just use a pointer to the rank
 * broadcast_recv is called when a routing information from a neighbouring node is recieved
-* it will decide if the node sending the broadcast would be a better suited parent that the current one 
-* Parameters: 
+* it will decide if the node sending the broadcast would be a better suited parent that the current one
+* Parameters:
 * struct broadcast_conn *c : a pointer to the structure containing the rank and the adress of the sending node
-* const linkaddr_t *from : the adress of the sender 
+* const linkaddr_t *from : the adress of the sender
 **/
 //TODO !!!!RSSI REMOVED FOR TEST PURPOSES
 static void broadcast_recv(struct broadcast_conn *c, const linkaddr_t *from)
@@ -255,15 +260,15 @@ static void broadcast_recv(struct broadcast_conn *c, const linkaddr_t *from)
 			parent_addr.u8[1] = (arrival->srcAdr).u8[1];
 			rssi_parent = rss_val;
 			printf("\t parent changed, new ranking : new rank: %d, parent address %d.%d \n",_rank, (parent_addr).u8[0],(arrival->srcAdr).u8[1]);
-		} 
+		}
 	}
 	else if(arrival->option == BROADCAST_REQUEST && _rank != SHRT_MAX){
 		//printf("Sending routing info via broadcast rank: %d\n", _rank);
 		broadcast_struct message;
-		message.rank = _rank; 
-		message.srcAdr.u8[0] = linkaddr_node_addr.u8[0]; 
+		message.rank = _rank;
+		message.srcAdr.u8[0] = linkaddr_node_addr.u8[0];
 		message.srcAdr.u8[1] = linkaddr_node_addr.u8[1];
-		packetbuf_copyfrom(&message ,sizeof(message)); 
+		packetbuf_copyfrom(&message ,sizeof(message));
 		broadcast_send(&broadcast);
 	}
 	else{
@@ -304,7 +309,7 @@ static void recv_ruc(struct runicast_conn *c, const linkaddr_t *from, uint8_t se
 	static signed char rss_val;
 	static signed char rss_offset;
 	runicast_struct* arrival = packetbuf_dataptr();
-	
+
 	printf("runicast message recieved from %d.%d | originating from %d.%d | value %d \n",from->u8[0], from->u8[1],arrival->senderAdr.u8[0],arrival->senderAdr.u8[1],arrival->status);
 	/*
 	//FOR debugging, root node don't transmit received messages
@@ -313,13 +318,13 @@ static void recv_ruc(struct runicast_conn *c, const linkaddr_t *from, uint8_t se
 	}
 */
 	if(arrival->option == SENSOR_INFO){
-		
+
 		if(add_to_compute_table(arrival, from)){
 			struct compute_children *n;
 			for(n = list_head(computation_list); n != NULL; n = list_item_next(n)){
 				if(linkaddr_cmp(&n->address, &arrival->senderAdr)){
 					printf("%d.%d arrival = %d , value number: %d, slope: %d\n",arrival->senderAdr.u8[0], arrival->senderAdr.u8[1],arrival->status, n->nbrValue, n->slope);
-					if(arrival->valve_status==1){ 
+					if(arrival->valve_status==1){
 						//valve is already open so do nothing
 						printf("the valve of %d.%d is open so do nothing\n", arrival->senderAdr.u8[0], arrival->senderAdr.u8[1]);
 					}else{
@@ -338,7 +343,7 @@ static void recv_ruc(struct runicast_conn *c, const linkaddr_t *from, uint8_t se
 					break;
 				}
 			}
-			
+
 		}
 		else{
 			printf("forwarding to server via my parent %d.%d, too much to compute\n", parent_addr.u8[0], parent_addr.u8[1] );
@@ -354,7 +359,7 @@ static void recv_ruc(struct runicast_conn *c, const linkaddr_t *from, uint8_t se
 		}
 		if(n == NULL){//children not found
 			n = memb_alloc(&children_memb);
-			
+
 			if(n == NULL){
 				return;
 			}
@@ -380,8 +385,8 @@ static void recv_ruc(struct runicast_conn *c, const linkaddr_t *from, uint8_t se
 				}
 			}
 
-			
-			if(found==true){ 
+
+			if(found==true){
 				packetbuf_copyfrom(arrival ,sizeof(runicast_struct));
 				printf("transmitting a message to %d.%d via nexthop %d.%d \n", arrival->destAddr.u8[0], arrival->destAddr.u8[1], n->next_hop.u8[0], n->next_hop.u8[1] );
 				runicast_send(&ruc, &n->next_hop, MAX_RETRANSMISSIONS);
@@ -404,8 +409,8 @@ static void recv_ruc(struct runicast_conn *c, const linkaddr_t *from, uint8_t se
 					break;
 				}
 			}
-			
-			if(found==true){ 
+
+			if(found==true){
 				packetbuf_copyfrom(arrival ,sizeof(runicast_struct));
 				printf("transmitting a message to %d.%d via nexthop %d.%d \n", arrival->destAddr.u8[0], arrival->destAddr.u8[1], n->next_hop.u8[0], n->next_hop.u8[1] );
 				runicast_send(&ruc, &n->next_hop, MAX_RETRANSMISSIONS);
@@ -437,7 +442,7 @@ static void recv_ruc(struct runicast_conn *c, const linkaddr_t *from, uint8_t se
 				list_remove(children_list, n);
 				break;
 			}
-			
+
 		}
 		packetbuf_copyfrom(arrival ,sizeof(runicast_struct));
 		runicast_send(&ruc, &parent_addr, MAX_RETRANSMISSIONS);
@@ -478,9 +483,9 @@ static void timedout_runicast(struct runicast_conn *c, const linkaddr_t *to, uin
 				list_remove(children_list, n);
 				found = true;
 				break;
-			}	
+			}
 		}
-		if (found==true) { 
+		if (found==true) {
 			runicast_struct lost_msg;
 			linkaddr_copy(&(&lost_msg)->senderAdr, &linkaddr_node_addr);
 			(&lost_msg)->option = CHILDREN_LOST;
@@ -497,14 +502,14 @@ static const struct runicast_callbacks runicast_callbacks = {recv_ruc, sent_runi
 PROCESS_THREAD(runicast_process, ev, data){
 	PROCESS_EXITHANDLER(runicast_close(&ruc);)
 	PROCESS_BEGIN();
-	
+
 	runicast_open(&ruc, 144, &runicast_callbacks);
 	while(1){
 		static struct etimer et;
 		etimer_set(&et, CLOCK_SECOND * seconds_before_routing_info);
 		PROCESS_WAIT_EVENT_UNTIL(etimer_expired(&et));
 		//printf("computing \n");
-		compute_least_square_slope(); 
+		compute_least_square_slope();
 	}
 	PROCESS_END();
 }
@@ -515,10 +520,10 @@ PROCESS_THREAD(broadcast_routing, ev, data){
 	PROCESS_EXITHANDLER(broadcast_close(&broadcast);)
 	PROCESS_BEGIN();
 	broadcast_open(&broadcast, 129, &broadcast_call);
-	
+
 	_rank = SHRT_MAX;
 	rssi_parent= -SHRT_MAX;
-	
+
 	//if(linkaddr_node_addr.u8[0]==1){_rank = 0; printf("fake root\n");} //TODO remove, just for testing without border router
 	while(1) {
 		static struct etimer et;
@@ -530,12 +535,12 @@ PROCESS_THREAD(broadcast_routing, ev, data){
 			//printf("Sending routing info via broadcast rank: %d\n", _rank);
 			broadcast_struct message;
 			message.rank = _rank;
-			message.option = BROADCAST_INFO; //modified 
-			message.srcAdr.u8[0] = linkaddr_node_addr.u8[0]; 
+			message.option = BROADCAST_INFO; //modified
+			message.srcAdr.u8[0] = linkaddr_node_addr.u8[0];
 			message.srcAdr.u8[1] = linkaddr_node_addr.u8[1];
-			packetbuf_copyfrom(&message ,sizeof(message)); 
+			packetbuf_copyfrom(&message ,sizeof(message));
 			broadcast_send(&broadcast);
-		} 
+		}
 		else{
 			printf("Not sending routing info, not connected to the network\n");
 		}
