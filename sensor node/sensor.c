@@ -3,7 +3,6 @@
 	Author : Benoît Michel
 	Date : May 2020
 */
-
 #include "contiki.h"
 #include "random.h"
 #include "dev/button-sensor.h"
