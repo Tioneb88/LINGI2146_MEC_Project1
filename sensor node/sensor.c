@@ -22,9 +22,9 @@
 
 #define MAX_HISTORY 10
 #define MAX_CHILDREN 100
+#define ROUTING_INTERVAL 120
 #define MAX_RETRANSMISSIONS 10
-#define seconds_before_routing_info 120
-#define seconds_before_sending_measurement 60
+#define MEASUREMENT_INTERVAL 60
 
 
 // Structures definition
@@ -101,8 +101,8 @@ static struct runicast_conn runicast;
 
 /*---------------------------------------------------------------------------*/
 PROCESS(sensor_process_runicast, "[Sensor node] +++ runicast execution");
-PROCESS(broadcast_routing, "[Sensor node] +++ broadcast routing");
-AUTOSTART_PROCESSES(&sensor_process_runicast, &broadcast_routing);
+PROCESS(sensor_broadcast_routing, "[Sensor node] +++ broadcast routing");
+AUTOSTART_PROCESSES(&sensor_process_runicast, &sensor_broadcast_routing);
 /*---------------------------------------------------------------------------*/
 
 
@@ -129,7 +129,6 @@ short collect_measurement(){
 
 
 /*
-* //TODO remove the broadcast struct and just use a pointer to the rank
 * broadcast_recv is called when a routing information from a neighbouring node is recieved
 * it will decide if the node sending the broadcast would be a better suited parent that the current one
 * Parameters:
@@ -358,32 +357,35 @@ static void timedout_runicast(struct runicast_conn *c, const linkaddr_t *to, uin
 		}
 	}
 }
-static const struct runicast_callbacks runicast_callbacks = {runicast_recv, sent_runicast, timedout_runicast};
+static const struct runicast_callbacks runicast_call = {runicast_recv, sent_runicast, timedout_runicast};
 
 
 /*---------------------------------------------------------------------------*/
-PROCESS_THREAD(sensor_process_runicast, ev, data){
-	PROCESS_EXITHANDLER(runicast_close(&runicast);)
+PROCESS_THREAD(sensor_process_runicast, ev, data) {
+	PROCESS_EXITHANDLER(runicast_close(&runicast))
+
 	PROCESS_BEGIN();
-	random_init(linkaddr_node_addr.u8[0]); //to use a different seed per node to generate random measurement, I use their IP address
-	runicast_open(&runicast, 144, &runicast_callbacks);
+	printf("[Sensor node] Starting runicast")
+	random_init(linkaddr_node_addr.u8[0]);
+	runicast_open(&runicast, 144, &runicast_call);
 
 	while(1) {
-		static struct etimer et;
 		runicast_struct msg;
-		etimer_set(&et, CLOCK_SECOND * seconds_before_sending_measurement);
+		static struct etimer et;
+		etimer_set(&et, CLOCK_SECOND * MEASUREMENT_INTERVAL);
 
 		PROCESS_WAIT_EVENT_UNTIL(etimer_expired(&et));
-		if(static_rank != SHRT_MAX){
-			printf("sending runicast value to parent %d.%d\n", parent_addr.u8[0], parent_addr.u8[1]);
-				linkaddr_copy(&(&msg)->sendAddr, &linkaddr_node_addr);
-				linkaddr_copy(&(&msg)->destAddr, &parent_addr);
-				msg.temp = collect_measurement();
-				msg.rank = static_rank;
-				msg.valve_status = valve_is_open;
-				msg.option = SENSOR_INFO;
+
+		if(static_rank != SHRT_MAX) {
+			msg.option = SENSOR_INFO;
+			msg.temp = collect_measurement();
+			msg.rank = static_rank;
+			msg.valve_status = valve_is_open;
+			linkaddr_copy(&(&msg)->sendAddr, &linkaddr_node_addr);
+			linkaddr_copy(&(&msg)->destAddr, &parent_addr);
 
 			packetbuf_copyfrom(&msg, sizeof(msg));
+			printf("[Sensor node] Runicast value sent to parent %d.%d\n", parent_addr.u8[0], parent_addr.u8[1]);
 			runicast_send(&runicast, &parent_addr, MAX_RETRANSMISSIONS);
 		}
 	}
@@ -393,36 +395,38 @@ PROCESS_THREAD(sensor_process_runicast, ev, data){
 
 
 /*---------------------------------------------------------------------------*/
-PROCESS_THREAD(broadcast_routing, ev, data){
+PROCESS_THREAD(sensor_broadcast_routing, ev, data) {
 	PROCESS_EXITHANDLER(broadcast_close(&broadcast);)
+
 	PROCESS_BEGIN();
+	printf("[Sensor node] Starting broadcast")
 	broadcast_open(&broadcast, 129, &broadcast_call);
 
 	static_rank = SHRT_MAX;
 	parent_rssi = -SHRT_MAX;
 
-	//if(linkaddr_node_addr.u8[0]==1){static_rank = 0; printf("fake root\n");} //TODO remove, just for testing without border router
-
 	while(1) {
+		broadcast_struct message;
 		static struct etimer et;
-		/* Send routing informations via broadcast every 60 secondes */
-		etimer_set(&et, CLOCK_SECOND * seconds_before_routing_info);
+		etimer_set(&et, CLOCK_SECOND * ROUTING_INTERVAL);
 
 		PROCESS_WAIT_EVENT_UNTIL(etimer_expired(&et));
-		if(static_rank != SHRT_MAX){
-			//printf("Sending routing info via broadcast rank: %d\n", static_rank);
-			broadcast_struct message;
+
+		if(static_rank != SHRT_MAX) {
+			message.option = BROADCAST_INFO;
 			message.rank = static_rank;
-			message.option = BROADCAST_INFO; //modified
 			message.sendAddr.u8[0] = linkaddr_node_addr.u8[0];
 			message.sendAddr.u8[1] = linkaddr_node_addr.u8[1];
-			packetbuf_copyfrom(&message ,sizeof(message));
+
+			packetbuf_copyfrom(&message, sizeof(message));
+			printf("[Sensor node] Broadcast sent with rank : %d\n", static_rank);
 			broadcast_send(&broadcast);
 		}
-		else{
-			printf("Not sending routing info, not connected to the network\n");
+		else {
+			printf("[Sensor node] No routing info sent, not connected to the network !\n");
 		}
 	}
 	PROCESS_END();
+	/*---------------------------------------------------------------------------*/
+
 }
-/*---------------------------------------------------------------------------*/
