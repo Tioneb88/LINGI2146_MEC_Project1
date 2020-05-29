@@ -96,8 +96,8 @@ static struct runicast_conn runicast;
 
 /*---------------------------------------------------------------------------*/
 PROCESS(border_process_cast, "[Border node] Runicast and broadcast");
-PROCESS(border_process_message, "[Border node] Process messages");
-AUTOSTART_PROCESSES(&border_process_cast, &border_process_message);
+PROCESS(border_process_messages, "[Border node] Process messages");
+AUTOSTART_PROCESSES(&border_process_cast, &border_process_messages);
 /*---------------------------------------------------------------------------*/
 
 
@@ -107,39 +107,33 @@ void process(char str[])
 	char *ptr = strtok(str, delim);
 	*/
 	char type[7];
-	short action;
-	if ( str[0] == 'A') { //it's an ACTION
-		if ( str[11] == 'O'){
-			action = 0;
-		}
-		else if ( str[11] == 'C') {
+	short action = 0;
+	if (str[0] == 'A') {
+		if ( str[11] == 'C') {
 			action = 1;
 		}
-		//printf("sensor = %c.%c action = %d \n", str[7], str[9], action );
 
 		runicast_struct msg;
 		linkaddr_t dest_addr;
 
-		int addr_part_1 = str[7] -'0';
-		int addr_part_2 = str[9] - '0';
-		dest_addr.u8[0] = addr_part_1;
-		dest_addr.u8[1] = addr_part_2;
+		dest_addr.u8[0] = str[7] -'0';
+		dest_addr.u8[1] = str[9] - '0';
 		linkaddr_copy(&(&msg)->sendAddr, &linkaddr_node_addr); //sender = myself
 		linkaddr_copy(&(&msg)->destAddr, &dest_addr); //destination = dest_addr
-		msg.temp = action;
 		msg.rank = 1;
+		msg.temp = action;
 		if(action==1) {
 			msg.option = CLOSING_VALVE;
 		}
-		else if (action==0){
+		else if (action==0) {
 		msg.option = OPENING_VALVE;
 		}
 		packetbuf_copyfrom(&msg, sizeof(msg));
 
-		children_struct *n;
+		children_struct *node;
 		bool found = false;
-		for(n = list_head(children_list); n != NULL; n = list_item_next(n)) {
-			if(linkaddr_cmp(&n->address, &(&msg)->destAddr)) {
+		for(node = list_head(children_list); node != NULL; node = list_item_next(node)) {
+			if(linkaddr_cmp(&node->address, &(&msg)->destAddr)) {
 				found = true;
 				break;
 			}
@@ -150,7 +144,7 @@ void process(char str[])
 			runicast_send(&runicast, &n->next_hop, MAX_RETRANSMISSIONS);
 		}
 		else {
-			n = list_head(children_list); // I should have at least one
+			node = list_head(children_list); // I should have at least one
 			printf("sending a runicast message (server answer), destination %d, nexthop %d \n", dest_addr.u8[0], n->next_hop.u8[0]);
 			runicast_send(&runicast, &n->next_hop, MAX_RETRANSMISSIONS);
 		}
