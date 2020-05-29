@@ -10,7 +10,7 @@ Fictive scenario of a building management system. We need to manage the air qual
 - computation node : node able to compute data of sensor node and send message to open or not the valve (can only supervize 5 sensor nodes simultaneously)
 - border node : node at the root of the tree built by the node, connected to the server
 
-The sensor nodes read data values once per minute. They send data to their parent node. The data arrives to the server or to a computation node with free space (limited to 5 nodes). The
+The sensor nodes read data values once per minute. They send data to their parent node. The data arrives to the server or to a computation node with free space (limited to 2 nodes). The
 data is stored and interpreted. If the slope of the line obtained by a least-squares fit to the last thirty sensor values is above a certain threshold, a message is sent to open the valve 
 for 10 minutes.
 Only the computation nodes or the server can compute a leat-squares and store the data. The lost of a child by an other node (especially a computation node) is supported. Indeed, a node 
