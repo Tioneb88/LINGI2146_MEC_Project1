@@ -65,8 +65,9 @@ struct History {
 enum {
 	SENSOR_INFO,
 	OPENING_VALVE,
-	CLOSING_VALVE,
-	FLUSH_CHILDREN,
+	SAVE_CHILDREN,
+	LOST_CHILDREN,
+	CLOSING_VALVE
 };
 
 enum {
@@ -86,20 +87,21 @@ MEMB(children_memb, children_struct, MAX_CHILDREN);
 // Static variables definition
 static int parent_rssi;
 static short static_rank;
-static struct ctimer broadcast_ctimer;
 
+// Static structures definition
+static struct ctimer broadcast_ctimer;
 static struct broadcast_conn broadcast;
 static struct runicast_conn runicast;
 
 
 /*---------------------------------------------------------------------------*/
-PROCESS(upstream_boarder_node_process, "upstream");
-PROCESS(downstream_boarder_node_process, "downstream");
+PROCESS(border_process_cast, "[Border node] Runicast and broadcast");
+PROCESS(border_process_message, "[Border node] Process messages");
 AUTOSTART_PROCESSES(&upstream_boarder_node_process, &downstream_boarder_node_process);
 /*---------------------------------------------------------------------------*/
 
 
-void process_answer(char str[])
+void process(char str[])
 {
 	/*char delim[] = " ";
 	char *ptr = strtok(str, delim);
@@ -126,10 +128,10 @@ void process_answer(char str[])
 		linkaddr_copy(&(&msg)->destAddr, &dest_addr); //destination = dest_addr
 		msg.temp = action;
 		msg.rank = 1;
-		if(action==1){
+		if(action==1) {
 			msg.option = CLOSING_VALVE;
 		}
-		else if(action==0){
+		else if (action==0){
 		msg.option = OPENING_VALVE;
 		}
 		packetbuf_copyfrom(&msg, sizeof(msg));
@@ -159,38 +161,34 @@ void process_answer(char str[])
 /*
 	Functions for runicast
 */
-static void runicast_recv(struct runicast_conn *c, const linkaddr_t *from, uint8_t seqno)
+static void recv_runicast(struct runicast_conn *c, const linkaddr_t *from, uint8_t seq)
 {
 	runicast_struct* arrival = packetbuf_dataptr();
-	history_struct *e = NULL;
-	static signed char rss_offset = -45;
+	history_struct *h = NULL;
+	static signed char rssi_offset = -45;
 
-	  /* OPTIONAL: Sender history */
-	for(e = list_head(history_table); e != NULL; e = e->next) {
-		if(linkaddr_cmp(&e->addr, from)) {
-			break;
-		}
+	// History managing
+	for(h = list_head(history_table); h != NULL; h = h->next) {
+		if(linkaddr_cmp(&h->addr, from)) break;
 	}
-	if(e == NULL) {
-		/* Create new history entry */
-		e = memb_alloc(&history_mem);
-		if(e == NULL) {
-			e = list_chop(history_table); /* Remove oldest at full history */
-		}
-		linkaddr_copy(&e->addr, from);
-		e->seq = seqno;
-		list_push(history_table, e);
-	} else {
-		/* Detect duplicate callback */
-		if(e->seq == seqno) {
-			//printf("runicast message received from %d.%d, seqno %d (DUPLICATE)\n", from->u8[0], from->u8[1], seqno);
+
+	if(h != NULL) {
+		if(h->seq == seq) {
+			printf("[Border node] Duplicate runicast message received from : node %d.%d, sequence number : %d\n", from->u8[0], from->u8[1], seq);
 			return;
 		}
-		/* Update existing history entry */
-		e->seq = seqno;
+		h->seq = seq;
 	}
+	else {
+		h = memb_alloc(&history_mem);
+		if(h == NULL) h = list_chop(history_table);
+		linkaddr_copy(&h->addr, from);
+		h->seq = seq;
+		list_push(history_table, h);
+	}
+	printf("[Border node] Runicast message received from : node %d.%d, value : %d, source : %d.%d\n", from->u8[0], from->u8[1], arrival->temp, arrival->sendAddr.u8[0], arrival->sendAddr.u8[1]);
 
-	if(arrival->option == SENSOR_INFO){ //adding the child
+	if(arrival->option == SENSOR_INFO) {
 		children_struct *n;
 		for(n = list_head(children_list); n != NULL; n = list_item_next(n)) {
 			if(linkaddr_cmp(&n->address, &arrival->sendAddr)) {
@@ -234,73 +232,73 @@ static void runicast_recv(struct runicast_conn *c, const linkaddr_t *from, uint8
 static void sent_runicast(struct runicast_conn *c, const linkaddr_t *to, uint8_t retransmissions){
   printf("runicast message sent to %d.%d, retransmissions %d\n", to->u8[0], to->u8[1], retransmissions);
 }
-static const struct runicast_callbacks runicast_callbacks = {runicast_recv, sent_runicast};
+static const struct runicast_callbacks runicast_call = {recv_runicast, sent_runicast};
 
 
-
+/*
+	Functions for broadcast
+*/
 static void broadcast_recv(struct broadcast_conn *c, const linkaddr_t *from)
 {
 	broadcast_struct* arrival = packetbuf_dataptr();
-	//printf("Routing information recieved from: src %d  with rank %d \n", arrival->sendAddr.u8[0], arrival->rank );
-	//printf("I can just ignore it since my rank will always be 1 \n");
+	printf("[Border node] Routing information recieved from : node %d with rank : %d\n", arrival->sendAddr.u8[0], arrival->rank);
+}
+
+
+void broadcast_timeout()
+{
+	ctimer_reset(&broadcast_ctimer);
+	broadcast_struct message;
+	message.option = BROADCAST_INFO;
+	message.rank = static_rank;
+	message.sendAddr.u8[0] = linkaddr_node_addr.u8[0];
+  message.sendAddr.u8[1] = linkaddr_node_addr.u8[1];
+	packetbuf_copyfrom( &message ,sizeof(message));
+	printf("[Border node] Routing information broadcasted with rank : %d\n", static_rank);
+	broadcast_send(&broadcast);
 }
 static const struct broadcast_callbacks broadcast_call = {broadcast_recv};
 
 
+/*---------------------------------------------------------------------------*/
 
-
-void broadcast_timeout() //let over nodes know that they can join me
+PROCESS_THREAD(border_process_cast, ev, data)
 {
-	ctimer_reset(&broadcast_ctimer);
-	//printf("broadcasting routing info rank %d \n", static_rank);
-	broadcast_struct message;
-	message.rank = static_rank;
-	message.option = BROADCAST_INFO; //modified
-	message.sendAddr.u8[0] = linkaddr_node_addr.u8[0];
-  message.sendAddr.u8[1] = linkaddr_node_addr.u8[1];
-	packetbuf_copyfrom( &message ,sizeof(message));
-	broadcast_send(&broadcast);
-}
-
-
-
-////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-//////////////////////////////////////////////////////////////// upstream process //////////////////////////////////////////////////////////////////////////////////////////
-////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-
-PROCESS_THREAD(upstream_boarder_node_process, ev, data)
-{
-	PROCESS_EXITHANDLER(runicast_close(&runicast);)
-	PROCESS_EXITHANDLER(broadcast_close(&broadcast);)
+	PROCESS_EXITHANDLER(runicast_close(&runicast);broadcast_close(&broadcast);)
+	//PROCESS_EXITHANDLER(broadcast_close(&broadcast);)
 
 	PROCESS_BEGIN();
-	runicast_open(&runicast, 144, &runicast_callbacks);
+	printf("[Border node] Starting runicast and broadcast");
+	runicast_open(&runicast, 144, &runicast_call);
 	broadcast_open(&broadcast, 129, &broadcast_call);
 
 	static_rank = 1;
 	broadcast_timeout();
 	ctimer_set(&broadcast_ctimer, CLOCK_SECOND * ROUTING_INTERVAL, broadcast_timeout, NULL);
 	PROCESS_YIELD();
+
 	PROCESS_END();
 }
 
-////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-//////////////////////////////////////////////////////////////// downstream process //////////////////////////////////////////////////////////////////////////////////////////
-////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+/*---------------------------------------------------------------------------*/
 
-//This part is temporar not finished yet. It should decode the message received and send the value to the correct node
 
-PROCESS_THREAD(downstream_boarder_node_process, ev, data)
+/*---------------------------------------------------------------------------*/
+
+PROCESS_THREAD(border_process_messages, ev, data)
 {
-
 	PROCESS_EXITHANDLER(broadcast_close(&broadcast);)
+
 	PROCESS_BEGIN();
+
 	for(;;) {
 		PROCESS_YIELD();
 		if(ev == serial_line_event_message) {
 		//printf("recieved line: %s \n", (char *) data);
-		process_answer( (char *) data);
+		process( (char *) data);
 		}
 	}
    PROCESS_END();
 }
+
+/*---------------------------------------------------------------------------*/

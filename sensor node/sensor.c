@@ -66,7 +66,8 @@ enum {
 	SENSOR_INFO,
 	OPENING_VALVE,
 	SAVE_CHILDREN,
-	LOST_CHILDREN
+	LOST_CHILDREN,
+	CLOSING_VALVE
 };
 
 enum {
@@ -124,7 +125,7 @@ short collect_measurement()
 /*
 	Functions for runicast
 */
-static void runicast_recv(struct runicast_conn *c, const linkaddr_t *from, uint8_t seq)
+static void recv_runicast(struct runicast_conn *c, const linkaddr_t *from, uint8_t seq)
 {
 	runicast_struct* arrival = packetbuf_dataptr();
 	history_struct *e = NULL;
@@ -276,7 +277,7 @@ static void timedout_runicast(struct runicast_conn *c, const linkaddr_t *to, uin
 		}
 	}
 }
-static const struct runicast_callbacks runicast_call = {runicast_recv, sent_runicast, timedout_runicast};
+static const struct runicast_callbacks runicast_call = {recv_runicast, sent_runicast, timedout_runicast};
 
 
 /*
