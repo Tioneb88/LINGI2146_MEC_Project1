@@ -97,7 +97,7 @@ static struct runicast_conn runicast;
 /*---------------------------------------------------------------------------*/
 PROCESS(border_process_cast, "[Border node] Runicast and broadcast");
 PROCESS(border_process_message, "[Border node] Process messages");
-AUTOSTART_PROCESSES(&upstream_boarder_node_process, &downstream_boarder_node_process);
+AUTOSTART_PROCESSES(&border_process_cast, &border_process_message);
 /*---------------------------------------------------------------------------*/
 
 
@@ -209,7 +209,6 @@ static void recv_runicast(struct runicast_conn *c, const linkaddr_t *from, uint8
 		}
 	}
 
-	//runicast_struct* arrival = packetbuf_dataptr();
 	printf("unicast message recieved from %d.%d | originating from %d.%d | value %d \n",from->u8[0], from->u8[1],arrival->sendAddr.u8[0],arrival->sendAddr.u8[1],arrival->temp);
 	char message[] = "SENSOR_VALUE " ;
 	char str[21];
