@@ -185,24 +185,6 @@ static void recv_runicast(struct runicast_conn *c, const linkaddr_t *from, uint8
 			list_add(children_list, node);
 		}
 	}
-
-	printf("unicast message recieved from %d.%d | originating from %d.%d | value %d \n",from->u8[0], from->u8[1],arrival->sendAddr.u8[0],arrival->sendAddr.u8[1],arrival->temp);
-	char message[] = "SENSOR_VALUE " ;
-	char str[21];
-	sprintf(str, "%d", arrival->sendAddr.u8[0]);
-	strcat(message, str);
-	strcat(message, " ");
-	char str2[21];
-	sprintf(str2, "%d", arrival->sendAddr.u8[1]);
-	strcat(message, str2);
-	strcat(message, " ");
-	char str3[21];
-	sprintf(str3, "%d", arrival->temp);
-	strcat(message, str3);
-	strcat(message, " \n");
-	printf("message I will send to server : %s", message);
-	printf(message); //printing will actually send to server via serial socket (activated within the simulation tools)
-
 }
 
 static void sent_runicast(struct runicast_conn *c, const linkaddr_t *to, uint8_t retransmissions){

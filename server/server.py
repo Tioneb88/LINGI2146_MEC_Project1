@@ -1,3 +1,9 @@
+"""
+	LINGI2146 Mobile and Embedded Computing : Project1
+	Author : Benoît Michel
+	Date : May 2020
+	Python 3.0 recommended
+"""
 import socket
 
 
