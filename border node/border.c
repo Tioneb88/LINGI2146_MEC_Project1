@@ -5,9 +5,9 @@
 */
 #include "contiki.h"
 #include "contiki-net.h"
-#include "random.h"
-#include "dev/button-sensor.h"
-#include "dev/leds.h"
+//#include "random.h"
+//#include "dev/button-sensor.h"
+//#include "dev/leds.h"
 #include "dev/serial-line.h"
 #include "net/rime/rime.h"
 #include "sys/ctimer.h"
@@ -143,11 +143,11 @@ void process_answer(char str[])
 			}
 		}
 
-		if(found==true){
+		if(found) {
 			printf("sending a runicast message (server answer), destination %d, nexthop %d \n", dest_addr.u8[0], n->next_hop.u8[0]);
 			runicast_send(&runicast, &n->next_hop, MAX_RETRANSMISSIONS);
 		}
-		else{
+		else {
 			n = list_head(children_list); // I should have at least one
 			printf("sending a runicast message (server answer), destination %d, nexthop %d \n", dest_addr.u8[0], n->next_hop.u8[0]);
 			runicast_send(&runicast, &n->next_hop, MAX_RETRANSMISSIONS);
