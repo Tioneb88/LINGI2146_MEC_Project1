@@ -5,7 +5,7 @@
 */
 #include "contiki.h"
 #include "random.h"
-#include "dev/button-sensor.h"
+//#include "dev/button-sensor.h"
 #include "dev/leds.h"
 #include "lib/list.h"
 #include "lib/memb.h"
@@ -128,29 +128,27 @@ short collect_measurement()
 static void recv_runicast(struct runicast_conn *c, const linkaddr_t *from, uint8_t seq)
 {
 	runicast_struct* arrival = packetbuf_dataptr();
-	history_struct *e = NULL;
+	history_struct *h = NULL;
 	static signed char rssi_offset = -45;
 
 	// History managing
-	for (e = list_head(history_table); e != NULL; e = e->next) {
-		if(linkaddr_cmp(&e->addr, from)) break;
+	for (h = list_head(history_table); h != NULL; h = h->next) {
+		if(linkaddr_cmp(&h->addr, from)) break;
 	}
 
-	if(e != NULL) {
-		if(e->seq == seq) {
+	if(h != NULL) {
+		if(h->seq == seq) {
 			printf("[Sensor node] Duplicate runicast message received from : node %d.%d, sequence number : %d\n", from->u8[0], from->u8[1], seq);
 			return;
 		}
-		e->seq = seq;
+		h->seq = seq;
 	}
 	else {
-		e = memb_alloc(&history_mem);
-		if(e == NULL) {
-			e = list_chop(history_table);
-		}
-		linkaddr_copy(&e->addr, from);
-		e->seq = seq;
-		list_push(history_table, e);
+		h = memb_alloc(&history_mem);
+		if(h == NULL) h = list_chop(history_table);
+		h->seq = seq;
+		linkaddr_copy(&h->addr, from);
+		list_push(history_table, h);
 	}
 	printf("[Sensor node] Runicast message received from : node %d.%d, value : %d, source : %d.%d\n",from->u8[0], from->u8[1], arrival->temp, arrival->sendAddr.u8[0], arrival->sendAddr.u8[1]);
 
