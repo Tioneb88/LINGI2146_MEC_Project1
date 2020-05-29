@@ -103,8 +103,8 @@ AUTOSTART_PROCESSES(&border_process_cast, &border_process_messages);
 void process(char str[])
 {
 	bool open = false;
-	if (str[0] == 'O') {
-		if ( str[11] == 'P') {
+	if(str[0] == 'O') {
+		if(str[11] == 'P') {
 			open = true;
 		}
 
@@ -112,7 +112,7 @@ void process(char str[])
 		linkaddr_t dest_addr;
 
 		message.rank = 1;
-		message.temp = valve_action;
+		message.temp = open;
 		if(open) message.option = OPENING_VALVE;
 		else message.option = CLOSING_VALVE;
 
