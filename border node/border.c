@@ -85,7 +85,7 @@ MEMB(children_memb, children_struct, MAX_CHILDREN);
 
 
 // Static variables definition
-static int parent_rssi;
+//static int parent_rssi;
 static short static_rank;
 
 // Static structures definition
@@ -106,7 +106,7 @@ AUTOSTART_PROCESSES(&border_process_cast, &border_process_messages);
 */
 void process(char str[])
 {
-	char type[7];
+	//char type[7];
 	short action = 0;
 	if (str[0] == 'A') {
 		if ( str[11] == 'C') {
@@ -135,7 +135,7 @@ void process(char str[])
 			}
 		}
 		if(!found) node = list_head(children_list);
-		printf("sending a runicast message (server answer), destination %d, nexthop %d \n", dest_addr.u8[0], n->next_hop.u8[0]);
+		printf("sending a runicast message (server answer), destination %d, nexthop %d\n", dest_addr.u8[0], node->next_hop.u8[0]);
 		runicast_send(&runicast, &node->next_hop, MAX_RETRANSMISSIONS);
 	}
 }
@@ -148,7 +148,7 @@ static void recv_runicast(struct runicast_conn *c, const linkaddr_t *from, uint8
 {
 	runicast_struct* arrival = packetbuf_dataptr();
 	history_struct *h = NULL;
-	static signed char rssi_offset = -45;
+	//static signed char rssi_offset = -45;
 
 	// History managing
 	for(h = list_head(history_table); h != NULL; h = h->next) {
