@@ -5,7 +5,6 @@
 */
 #include "contiki.h"
 #include "random.h"
-//#include "dev/button-sensor.h"
 #include "dev/leds.h"
 #include "lib/list.h"
 #include "lib/memb.h"
@@ -24,6 +23,7 @@
 #define ROUTING_INTERVAL 120
 #define MAX_RETRANSMISSIONS 10
 #define MEASUREMENT_INTERVAL 60
+#define THRESHOLD 20
 
 
 // Structures definition
@@ -112,11 +112,11 @@ short collect_measurement()
 	leds_off(LEDS_ALL);
 	printf("[Sensor node] Loading measurements\n");
 	short measurement;
-	if(valve_is_open) { measurement = (random_rand() % 50) +1; }
-	else { measurement = (random_rand() % 100) +1; }
+	if(valve_is_open) measurement = (random_rand() % 25) +1;
+	else measurement = (random_rand() % 50) +1;
 
-	if(measurement >= 40){
-		leds_toggle(LEDS_GREEN);
+	if(measurement >= THRESHOLD){
+		leds_toggle(LEDS_BLUE);
 	}
 	return measurement;
 }

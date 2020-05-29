@@ -4,9 +4,6 @@
 	Date : May 2020
 */
 #include "contiki.h"
-//#include "random.h"
-//#include "dev/button-sensor.h"
-//#include "dev/leds.h"
 #include "lib/list.h"
 #include "lib/memb.h"
 #include "net/rime/rime.h"
@@ -28,7 +25,7 @@
 #define COMPUTING_INTERVAL 60
 #define MAX_VALUES_BY_SENSOR 30
 #define MAX_SENSOR_COMPUTED 2
-#define THRESHOLD 10
+#define THRESHOLD 20
 
 
 // Structures definition

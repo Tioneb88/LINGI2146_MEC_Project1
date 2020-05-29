@@ -5,9 +5,6 @@
 */
 #include "contiki.h"
 #include "contiki-net.h"
-//#include "random.h"
-//#include "dev/button-sensor.h"
-//#include "dev/leds.h"
 #include "dev/serial-line.h"
 #include "net/rime/rime.h"
 #include "sys/timer.h"
@@ -85,7 +82,6 @@ MEMB(children_memb, children_struct, MAX_CHILDREN);
 
 
 // Static variables definition
-//static int parent_rssi;
 static short static_rank;
 
 // Static structures definition
@@ -106,24 +102,24 @@ AUTOSTART_PROCESSES(&border_process_cast, &border_process_messages);
 */
 void process(char str[])
 {
-	//char type[7];
-	short action = 0;
-	if (str[0] == 'A') {
-		if ( str[11] == 'C') {
-			action = 1;
+	bool open = false;
+	if (str[0] == 'O') {
+		if ( str[11] == 'P') {
+			open = true;
 		}
 
 		runicast_struct message;
 		linkaddr_t dest_addr;
 
+		message.rank = 1;
+		message.temp = valve_action;
+		if(open) message.option = OPENING_VALVE;
+		else message.option = CLOSING_VALVE;
+
 		dest_addr.u8[0] = str[7] -'0';
 		dest_addr.u8[1] = str[9] - '0';
 		linkaddr_copy(&(&message)->sendAddr, &linkaddr_node_addr);
 		linkaddr_copy(&(&message)->destAddr, &dest_addr);
-		message.rank = 1;
-		message.temp = action;
-		if(action==1) message.option = CLOSING_VALVE;
-		else message.option = OPENING_VALVE;
 		packetbuf_copyfrom(&message, sizeof(message));
 
 		children_struct *node;
@@ -135,7 +131,7 @@ void process(char str[])
 			}
 		}
 		if(!found) node = list_head(children_list);
-		printf("sending a runicast message (server answer), destination %d, nexthop %d\n", dest_addr.u8[0], node->next_hop.u8[0]);
+		printf("[Border node] Runicast message forwarded from server, destination : %d, nexthop : %d\n", dest_addr.u8[0], node->next_hop.u8[0]);
 		runicast_send(&runicast, &node->next_hop, MAX_RETRANSMISSIONS);
 	}
 }
