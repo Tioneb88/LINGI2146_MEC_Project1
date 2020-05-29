@@ -101,11 +101,11 @@ AUTOSTART_PROCESSES(&border_process_cast, &border_process_messages);
 /*---------------------------------------------------------------------------*/
 
 
+/*
+	Process the received messages
+*/
 void process(char str[])
 {
-	/*char delim[] = " ";
-	char *ptr = strtok(str, delim);
-	*/
 	char type[7];
 	short action = 0;
 	if (str[0] == 'A') {
@@ -113,41 +113,30 @@ void process(char str[])
 			action = 1;
 		}
 
-		runicast_struct msg;
+		runicast_struct message;
 		linkaddr_t dest_addr;
 
 		dest_addr.u8[0] = str[7] -'0';
 		dest_addr.u8[1] = str[9] - '0';
-		linkaddr_copy(&(&msg)->sendAddr, &linkaddr_node_addr); //sender = myself
-		linkaddr_copy(&(&msg)->destAddr, &dest_addr); //destination = dest_addr
-		msg.rank = 1;
-		msg.temp = action;
-		if(action==1) {
-			msg.option = CLOSING_VALVE;
-		}
-		else if (action==0) {
-		msg.option = OPENING_VALVE;
-		}
-		packetbuf_copyfrom(&msg, sizeof(msg));
+		linkaddr_copy(&(&message)->sendAddr, &linkaddr_node_addr);
+		linkaddr_copy(&(&message)->destAddr, &dest_addr);
+		message.rank = 1;
+		message.temp = action;
+		if(action==1) message.option = CLOSING_VALVE;
+		else message.option = OPENING_VALVE;
+		packetbuf_copyfrom(&message, sizeof(message));
 
 		children_struct *node;
 		bool found = false;
 		for(node = list_head(children_list); node != NULL; node = list_item_next(node)) {
-			if(linkaddr_cmp(&node->address, &(&msg)->destAddr)) {
+			if(linkaddr_cmp(&node->address, &(&message)->destAddr)) {
 				found = true;
 				break;
 			}
 		}
-
-		if(found) {
-			printf("sending a runicast message (server answer), destination %d, nexthop %d \n", dest_addr.u8[0], n->next_hop.u8[0]);
-			runicast_send(&runicast, &n->next_hop, MAX_RETRANSMISSIONS);
-		}
-		else {
-			node = list_head(children_list); // I should have at least one
-			printf("sending a runicast message (server answer), destination %d, nexthop %d \n", dest_addr.u8[0], n->next_hop.u8[0]);
-			runicast_send(&runicast, &n->next_hop, MAX_RETRANSMISSIONS);
-		}
+		if(!found) node = list_head(children_list);
+		printf("sending a runicast message (server answer), destination %d, nexthop %d \n", dest_addr.u8[0], n->next_hop.u8[0]);
+		runicast_send(&runicast, &node->next_hop, MAX_RETRANSMISSIONS);
 	}
 }
 
@@ -182,24 +171,22 @@ static void recv_runicast(struct runicast_conn *c, const linkaddr_t *from, uint8
 	}
 	printf("[Border node] Runicast message received from : node %d.%d, value : %d, source : %d.%d\n", from->u8[0], from->u8[1], arrival->temp, arrival->sendAddr.u8[0], arrival->sendAddr.u8[1]);
 
+	// Behaviour by type of message
 	if(arrival->option == SENSOR_INFO) {
-		children_struct *n;
-		for(n = list_head(children_list); n != NULL; n = list_item_next(n)) {
-			if(linkaddr_cmp(&n->address, &arrival->sendAddr)) {
-				n->last_update = clock_time();
+		children_struct *node;
+		for(node = list_head(children_list); node != NULL; node = list_item_next(node)) {
+			if(linkaddr_cmp(&node->address, &arrival->sendAddr)) {
+				node->last_update = clock_time();
 				break;
 			}
 		}
-		if(n == NULL){//children not found
-			n = memb_alloc(&children_memb);
-
-			if(n == NULL){
-				return;
-			}
-			linkaddr_copy(&n->address, &arrival->sendAddr);
-			linkaddr_copy(&n->next_hop, from);
-			n->last_update = clock_time();
-			list_add(children_list, n);
+		if(node == NULL) {
+			node = memb_alloc(&children_memb);
+			if(node == NULL) return;
+			linkaddr_copy(&node->address, &arrival->sendAddr);
+			linkaddr_copy(&node->next_hop, from);
+			node->last_update = clock_time();
+			list_add(children_list, node);
 		}
 	}
 
@@ -217,7 +204,7 @@ static void recv_runicast(struct runicast_conn *c, const linkaddr_t *from, uint8
 	sprintf(str3, "%d", arrival->temp);
 	strcat(message, str3);
 	strcat(message, " \n");
-	//printf("message I will send to server : %s", message);
+	printf("message I will send to server : %s", message);
 	printf(message); //printing will actually send to server via serial socket (activated within the simulation tools)
 
 }
