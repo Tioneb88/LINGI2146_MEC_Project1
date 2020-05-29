@@ -51,5 +51,5 @@ while True:
 		message = message + char
 		char = sock.recv(1).decode()
 	answer = process(message)
-	if (answer != "none"):
+	if (answer != "NONE"):
 		sock.sendall(str(answer))
